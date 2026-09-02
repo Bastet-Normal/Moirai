@@ -138,16 +138,17 @@ class KnowledgeGraph(BaseModel):
 
     def export_cytoscape_data(self) -> dict[str, Any]:
         """导出用于前端可视化图谱渲染的数据结构"""
-        elements = []
-        for node in self.nodes.values():
-            elements.append({
+        elements = [
+            {
                 "data": {
                     "id": node.name,
                     "label": node.name,
                     "type": node.entity_type,
                     "status": node.status,
                 }
-            })
+            }
+            for node in self.nodes.values()
+        ]
 
         for idx, edge in enumerate(self.edges):
             if edge.is_active:

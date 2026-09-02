@@ -1818,6 +1818,7 @@
         document.getElementById('current-chapter-body').textContent = '正在加载…';
         document.getElementById('welcome-view').classList.add('hidden');
         document.getElementById('novel-workspace').classList.remove('hidden');
+        syncHeroTypewriter();
         setSidebarOpen(false);
         renderNovelList();
         switchTab(view?.tab || 'chapters');
@@ -1828,7 +1829,7 @@
                 fetch(`/api/novel/${encodeURIComponent(novelId)}/compliance`)
             ]);
             const data = await res.json();
-            const compliance = cres.ok ? await cres.json() : null;
+            const compliance = await cres.json().catch(() => ({}));
             if (token !== novelLoadToken || currentNovelId !== novelId) return;
             if (!res.ok) throw new Error(data.detail || '项目详情加载失败');
             if (data.novel_id !== novelId || !data.revision) throw new Error('作品响应身份不一致，请刷新');
@@ -1838,13 +1839,27 @@
                 chapter._revision = data.revision;
             }
             window._complianceMap = {};
-            if (compliance && compliance.revision === data.revision) {
+            window._complianceUnavailable = '';
+            if (cres.ok && compliance.revision === data.revision) {
                 (compliance.chapters || []).forEach(c => { window._complianceMap[c.chapter_number] = c.hits; });
+            } else {
+                window._complianceUnavailable = cres.ok
+                    ? '合规扫描结果版本不一致，请刷新后重试'
+                    : (compliance.detail || '合规扫描暂时不可用，请检查自定义词库');
             }
             workspace.removeAttribute('inert');
             workspace.setAttribute('aria-busy', 'false');
             await renderNovelWorkspace(view);
             if (token !== novelLoadToken || currentNovelId !== novelId) return false;
+            if (window._complianceUnavailable) {
+                const warningKey = `${novelId}:${window._complianceUnavailable}`;
+                if (window._lastComplianceWarning !== warningKey) {
+                    window._lastComplianceWarning = warningKey;
+                    showToast(window._complianceUnavailable, 'error');
+                }
+            } else {
+                window._lastComplianceWarning = '';
+            }
             const reconciliation = novelData.state_reconciliation;
             if (reconciliation?.required) {
                 const key = `${novelId}:${reconciliation.chapters.join(',')}`;
@@ -1864,6 +1879,7 @@
             novelData = null;
             workspace.classList.add('hidden');
             document.getElementById('welcome-view').classList.remove('hidden');
+            syncHeroTypewriter();
             showToast('项目详情加载失败: ' + e, 'error');
         }
     }
@@ -3009,6 +3025,18 @@
     function renderComplianceRail() {
         const chip = document.getElementById('compliance-chip');
         const box = document.getElementById('compliance-box');
+        if (window._complianceUnavailable) {
+            chip.classList.remove('hidden');
+            chip.setAttribute('aria-label', '合规扫描不可用');
+            document.getElementById('compliance-count').innerText = '扫描不可用';
+            box.classList.remove('hidden');
+            box.innerHTML = `
+                <div class="card p-5" role="alert">
+                    <div class="text-[10.5px] font-extrabold mb-2" style="color:var(--danger)"><i aria-hidden="true" class="fa-solid fa-triangle-exclamation"></i> 合规扫描不可用</div>
+                    <div class="text-[11px] t2 leading-relaxed">${escapeHtml(window._complianceUnavailable)}</div>
+                </div>`;
+            return;
+        }
         const hits = currentCompliance();
         if (!hits.length) {
             chip.classList.add('hidden');
@@ -3201,6 +3229,7 @@
                 currentNovelId = ''; novelData = null; selectedChapterIdx = 0; selectedChapterNum = 0;
                 document.getElementById('novel-workspace').classList.add('hidden');
                 document.getElementById('welcome-view').classList.remove('hidden');
+                syncHeroTypewriter();
             }
             loadNovels();
         } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error'); }
@@ -3581,9 +3610,20 @@
     async function reloadCustomWords() {
         try {
             const res = await fetch('/api/compliance/custom_words');
-            const d = await res.json();
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                window._customWordsAvailable = false;
+                showToast(d.detail || '自定义合规词库读取失败', 'error');
+                return false;
+            }
             window._customWords = d.custom_words || {};
-        } catch (e) { window._customWords = {}; }
+            window._customWordsAvailable = true;
+            return true;
+        } catch (e) {
+            window._customWordsAvailable = false;
+            showToast('自定义合规词库读取失败，请检查本机服务', 'error');
+            return false;
+        }
     }
 
     async function persistCustomWords() {
@@ -3604,7 +3644,7 @@
         if (!input || !catSel) return;
         const word = input.value.trim();
         if (!word) return;
-        await reloadCustomWords();
+        if (!(await reloadCustomWords())) return;
         const cat = catSel.value;
         window._customWords = window._customWords || {};
         (window._customWords[cat] = window._customWords[cat] || []).push(word);
@@ -3613,7 +3653,7 @@
     }
 
     async function removeCustomWord(cat, word) {
-        await reloadCustomWords();
+        if (!(await reloadCustomWords())) return;
         const list = (window._customWords || {})[cat] || [];
         window._customWords[cat] = list.filter(w => w !== word);
         if (!window._customWords[cat].length) delete window._customWords[cat];
@@ -3930,17 +3970,37 @@
 
     function toggleLogPanel() { document.getElementById('log-drawer').classList.toggle('show'); }
 
+    const STATUS_POLL_ACTIVE_MS = 1600;
+    const STATUS_POLL_IDLE_MS = 8000;
+    const STATUS_POLL_BACKGROUND_MS = 30000;
     let pollTimer = null;
     let wasRunning = false;
     let pollInFlight = false;
     let observedTaskId;
     let expectedTaskId = '';
+    function statusPollDelay() {
+        if (document.hidden) return STATUS_POLL_BACKGROUND_MS;
+        return (wasRunning || expectedTaskId) ? STATUS_POLL_ACTIVE_MS : STATUS_POLL_IDLE_MS;
+    }
+
+    function scheduleStatusPoll(delay = statusPollDelay()) {
+        if (pollTimer !== null) clearTimeout(pollTimer);
+        pollTimer = setTimeout(async () => {
+            pollTimer = null;
+            await refreshTaskStatus();
+            scheduleStatusPoll();
+        }, delay);
+    }
+
     function pollStatus(taskId = '') {
         if (taskId) expectedTaskId = taskId;
-        if (!pollTimer) pollTimer = setInterval(refreshTaskStatus, 1600);
+        if (pollTimer !== null) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
         // Establish the initial task id immediately and observe short jobs that
         // may finish before the first interval tick.
-        void refreshTaskStatus();
+        void refreshTaskStatus().finally(() => scheduleStatusPoll());
     }
 
     async function refreshTaskStatus() {
@@ -3992,22 +4052,50 @@
         '剑出鞘时，整个藏书阁的器灵都在低语。',
         '第九道天雷落下的那一刻，他笑了。',
     ];
-    let heroLine = 0, heroChar = 0, heroDeleting = false;
+    let heroLine = 0, heroChar = 0, heroDeleting = false, heroTimer = null;
+    function heroShouldRun() {
+        const welcome = document.getElementById('welcome-view');
+        return !document.hidden
+            && welcome && !welcome.classList.contains('hidden')
+            && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function syncHeroTypewriter() {
+        const el = document.getElementById('hero-typing');
+        if (!el) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches && !el.textContent) {
+            el.textContent = HERO_LINES[0];
+        }
+        if (!heroShouldRun()) {
+            if (heroTimer !== null) clearTimeout(heroTimer);
+            heroTimer = null;
+            return;
+        }
+        if (heroTimer === null) heroTypewriter();
+    }
+
     function heroTypewriter() {
+        heroTimer = null;
+        if (!heroShouldRun()) return;
         const el = document.getElementById('hero-typing');
         if (!el) return;
         const line = HERO_LINES[heroLine];
         if (!heroDeleting) {
             heroChar++;
             el.textContent = line.slice(0, heroChar);
-            if (heroChar >= line.length) { heroDeleting = true; setTimeout(heroTypewriter, 2600); return; }
+            if (heroChar >= line.length) { heroDeleting = true; heroTimer = setTimeout(heroTypewriter, 2600); return; }
         } else {
             heroChar -= 2;
             if (heroChar <= 0) { heroChar = 0; heroDeleting = false; heroLine = (heroLine + 1) % HERO_LINES.length; }
             el.textContent = line.slice(0, Math.max(0, heroChar));
         }
-        setTimeout(heroTypewriter, heroDeleting ? 24 : 74);
+        heroTimer = setTimeout(heroTypewriter, heroDeleting ? 24 : 74);
     }
+
+    document.addEventListener('visibilitychange', () => {
+        scheduleStatusPoll();
+        syncHeroTypewriter();
+    });
 
     window.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.modal-mask').forEach((mask, index) => {
@@ -4034,11 +4122,7 @@
         const readerRail = document.getElementById('reader-rail');
         readerRail.setAttribute('aria-hidden', 'true');
         readerRail.setAttribute('inert', '');
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            document.getElementById('hero-typing').textContent = HERO_LINES[0];
-        } else {
-            heroTypewriter();
-        }
+        syncHeroTypewriter();
         const readerScroller = document.getElementById('reader-scroll');
         if (readerScroller) readerScroller.addEventListener('scroll', updateReaderProgress, { passive: true });
         reloadCustomWords();

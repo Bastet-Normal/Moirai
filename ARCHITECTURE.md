@@ -297,7 +297,10 @@ cannot close a newer editor or navigate away from another selected book. Conflic
 responses keep unsaved input visible. Task polling has one in-flight request, tracks the
 task ID returned at admission so even a job that finishes before the first status response
 still refreshes, and only refreshes the current project if the task belongs to it and
-selection has not changed since the poll began. These preconditions cover application-mediated
+selection has not changed since the poll began. It polls every 1.6 seconds while a task is
+active or expected, backs off to 8 seconds while idle and 30 seconds while the document is
+hidden. The welcome typewriter is likewise suspended outside the visible welcome view.
+These preconditions cover application-mediated
 changes, not arbitrary hostile modifications made directly on disk.
 
 In-place project refresh is distinct from explicit project selection. Refresh
@@ -412,6 +415,13 @@ model transport are replaced with an offline stub. Normal server behavior is not
 patched outside that process. Only loopback binding is offered. The original
 seed script is not an equivalent isolation boundary.
 
+`.custom_compliance.json` is read through the regular-file JSON boundary with a
+128 KiB limit. API validation and disk loading share the same normalization rules:
+at most 50 categories and 500 terms, bounded text, valid Unicode, no NUL and stable
+deduplication. A malformed, oversized or inaccessible file raises a safe domain error;
+compliance endpoints return 503 and the browser renders an unavailable state instead of
+reporting a false zero-risk result or overwriting the file with an empty dictionary.
+
 ## Deployment boundary
 
 The current product is a local, single-user authoring application. The server deliberately refuses non-loopback binding because its API can edit projects and configure an API key. Host and Origin checks also reject DNS-rebinding and cross-site browser requests; security headers prevent framing and permit only local scripts/styles/fonts, including on rejected requests. Stateful responses are marked `no-store`/`no-cache`: a cached bookshelf, revision, task state or recovery decision must never outlive the underlying files. Tailwind output, Cytoscape and Font Awesome assets are versioned under `web/assets/`, so the UI has no runtime CDN dependency. If the product becomes multi-user, the correct next architecture is a database plus object storage, authenticated APIs and a durable external job queue—not additional global dictionaries or filesystem locks.
@@ -453,11 +463,13 @@ job installs locked Chromium, Firefox and WebKit engines and runs the real page
 against the disposable offline server while rejecting non-loopback requests.
 Repository permission is read-only; every external Action is pinned to a full commit
 SHA, checkout drops credentials, and model-provider variables are forced to an empty
-key plus a closed loopback endpoint. Workflow and Dependabot policy files are
-themselves gate inputs.
-Local contract tests and static workflow validation establish configuration
-integrity, not successful execution on an OS; only completed hosted runs provide
-platform evidence.
+key plus a closed loopback endpoint. A single Linux job audits both exact Python lock
+files instead of repeating network-dependent audits across the six-platform matrix.
+Push execution is limited to `main`, while pull requests retain the complete gate;
+Dependabot groups updates to reduce duplicate monthly runs. Workflow and Dependabot
+policy files are themselves gate inputs. Local contract tests and static workflow
+validation establish configuration integrity; the completed main-branch hosted matrix
+provides execution evidence for the declared runner images, not for every deployment OS.
 
 Lower-level commands remain:
 

@@ -145,11 +145,13 @@ def main() -> int:
         report["skipped_checks"].append("Browser state/syntax, real-browser syntax and asset checks: Node.js unavailable")
         print("Node.js is unavailable; browser JavaScript checks were NOT run.", flush=True)
     if args.audit:
-        for lock in ("requirements.lock", "requirements-dev.lock"):
-            commands.append((f"Published dependency vulnerabilities ({lock})", [
+        commands.extend(
+            (f"Published dependency vulnerabilities ({lock})", [
                 sys.executable, "-m", "pip_audit", "-r", lock,
                 "--require-hashes", "--disable-pip", "--strict", "--progress-spinner", "off",
-            ]))
+            ])
+            for lock in ("requirements.lock", "requirements-dev.lock")
+        )
 
     # Each invocation (including concurrent Python versions) owns its coverage
     # database and child-process fragments. Never erase/combine another run's data.

@@ -6,6 +6,12 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
+from config.compliance_words import (
+    MAX_CUSTOM_CATEGORIES,
+    MAX_CUSTOM_WORD_CHARS,
+    MAX_CUSTOM_WORDS,
+    normalize_custom_words,
+)
 from core.text_limits import MAX_CHAPTER_TEXT_CHARS
 
 
@@ -22,7 +28,10 @@ def valid_text(value: str) -> str:
 Text = Annotated[str, AfterValidator(valid_text)]
 ChapterNumber = Annotated[int, Field(strict=True, ge=1, le=1_000_000)]
 Tag = Annotated[Text, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-Word = Annotated[Text, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
+Word = Annotated[
+    Text,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_CUSTOM_WORD_CHARS),
+]
 
 
 class RequestModel(BaseModel):
@@ -208,22 +217,14 @@ class AdoptBranchRequest(ProjectRevisionRequest):
 
 
 class CustomWordsRequest(RequestModel):
-    words: dict[Text, Annotated[list[Word], Field(max_length=500)]] = Field(max_length=50)
+    words: dict[Text, Annotated[list[Word], Field(max_length=MAX_CUSTOM_WORDS)]] = Field(
+        max_length=MAX_CUSTOM_CATEGORIES
+    )
 
     @field_validator("words")
     @classmethod
     def bounded_categories(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
-        if sum(map(len, value.values())) > 500:
-            raise ValueError("自定义词条总数上限 500")
-        clean: dict[str, list[str]] = {}
-        for category, words in value.items():
-            category = category.strip()
-            if not category or len(category) > 12:
-                raise ValueError("分类名需要 1~12 个字符，不会自动截断")
-            if category in clean:
-                raise ValueError("去除首尾空白后出现重复分类名")
-            clean[category] = list(dict.fromkeys(words))
-        return clean
+        return normalize_custom_words(value)
 
 
 class ParaRewriteRequest(ProjectRevisionRequest):

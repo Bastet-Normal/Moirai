@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import zipfile
+from datetime import datetime
 
 from fastapi.testclient import TestClient
 from starlette.requests import Request
@@ -103,6 +104,8 @@ def test_failed_chapter_report_contains_only_correlation_id(tmp_path, monkeypatc
     assert SECRET not in report + caplog.text
     entry = json.loads(report)
     assert entry["chapter"] == 7 and entry["ok"] is False
+    generated_at = datetime.fromisoformat(entry["time"])
+    assert generated_at.tzinfo is not None and generated_at.utcoffset().total_seconds() == 0
     assert re.search(r"诊断编号 [0-9a-f]{12}", entry["detail"])
     get_settings.cache_clear()
 

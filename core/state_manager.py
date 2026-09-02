@@ -596,7 +596,7 @@ class StateManager:
             for chunk in self.semantic_memory.chunks
             if chunk.chapter_number == chapter_num
         ]
-        bundle = {
+        return {
             "snapshot_version": 3,
             "novel_id": self.novel_id,
             "chapter_num": chapter_num,
@@ -605,7 +605,6 @@ class StateManager:
             "knowledge_graph": json.loads(graph.model_dump_json()),
             "semantic_memory_chapter": {"chunks": chapter_memory},
         }
-        return bundle
 
     @property
     def _timeline_baseline_file(self) -> Path:

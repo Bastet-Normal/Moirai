@@ -4,7 +4,7 @@ line-length = 120
 extend-exclude = ["novel_projects", "web"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "PERF401", "RET504", "PLW2901"]
 ignore = ["E501"]
 
 [tool.pytest.ini_options]

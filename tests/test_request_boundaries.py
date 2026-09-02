@@ -385,6 +385,48 @@ def test_custom_words_are_not_silently_truncated_or_merged(isolated):
     assert isolated.get("/api/compliance/custom_words").json()["custom_words"] == {"test": ["one", "two"]}
 
 
+@pytest.mark.parametrize("content", [
+    "{broken",
+    json.dumps(["not-a-category-map"]),
+    json.dumps({"test": ["bad\x00word"]}),
+])
+def test_corrupt_custom_words_fail_closed_with_a_safe_error(isolated, tmp_path, content):
+    words_file = tmp_path / ".custom_compliance.json"
+    words_file.write_text(content, encoding="utf-8")
+
+    response = isolated.get("/api/compliance/custom_words")
+
+    assert response.status_code == 503
+    assert "自定义合规词库不可用" in response.json()["detail"]
+    assert str(tmp_path) not in response.text
+
+
+def test_oversize_custom_words_fail_before_json_decode(isolated, tmp_path):
+    from config.compliance_words import MAX_CUSTOM_COMPLIANCE_BYTES
+
+    (tmp_path / ".custom_compliance.json").write_bytes(b" " * (MAX_CUSTOM_COMPLIANCE_BYTES + 1))
+    response = isolated.get("/api/compliance/custom_words")
+
+    assert response.status_code == 503
+    assert "自定义合规词库不可用" in response.json()["detail"]
+
+
+def test_corrupt_custom_words_cannot_be_reported_as_a_clean_novel(isolated, tmp_path):
+    manager = StateManager("book")
+    manager.set_concept(NovelConcept(
+        title="book", genre="test", logline="test", golden_finger="test", core_conflict="test"
+    ))
+    manager.save_chapter(ChapterContent(
+        chapter_number=1, volume_number=1, title="chapter", full_text="clean", word_count=5
+    ))
+    (tmp_path / ".custom_compliance.json").write_text("{broken", encoding="utf-8")
+
+    response = isolated.get("/api/novel/book/compliance")
+
+    assert response.status_code == 503
+    assert "自定义合规词库不可用" in response.json()["detail"]
+
+
 def test_excessive_structure_produces_one_bounded_error(isolated):
     response = isolated.post("/api/novel/create", json={str(i): "x" for i in range(1000)})
     assert response.status_code == 422

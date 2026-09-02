@@ -789,7 +789,7 @@ class NovelPipeline:
                     context={"chapter": chap_num},
                 )
         entry = {
-            "time": datetime.datetime.now().isoformat(timespec="seconds"),
+            "time": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
             "chapter": chap_num,
             "ok": ok,
             "detail": detail[:500],

@@ -4,10 +4,19 @@
 用户可在此文件中按平台规则自行增删。
 """
 
-import json
-
 from config.settings import get_output_dir
-from core.storage import atomic_write_json
+from core.error_reporting import SafeUserMessage
+from core.storage import atomic_write_json, read_json
+
+MAX_CUSTOM_COMPLIANCE_BYTES = 128 * 1024
+MAX_CUSTOM_CATEGORIES = 50
+MAX_CUSTOM_WORDS = 500
+MAX_CUSTOM_CATEGORY_CHARS = 12
+MAX_CUSTOM_WORD_CHARS = 30
+
+
+class ComplianceWordsError(SafeUserMessage, RuntimeError):
+    """The persisted custom word list is unsafe or cannot be decoded."""
 
 COMPLIANCE_CATEGORIES = {
     "低俗风险": [
@@ -26,23 +35,70 @@ COMPLIANCE_CATEGORIES = {
 }
 
 
-def get_custom_words() -> dict:
-    """读取用户自定义合规词库（按分类组织的可持久化扩展词表）"""
+def _clean_text(value: object, *, label: str, maximum: int) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label}必须是文本")
+    if "\x00" in value:
+        raise ValueError(f"{label}不能包含空字符")
     try:
-        words_file = get_output_dir() / ".custom_compliance.json"
-        if words_file.exists():
-            data = json.loads(words_file.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return {k: [str(w) for w in v] for k, v in data.items() if isinstance(v, list)}
-    except Exception:
-        pass
-    return {}
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{label}包含无效 Unicode 字符") from exc
+    clean = value.strip()
+    if not clean or len(clean) > maximum:
+        raise ValueError(f"{label}需要 1~{maximum} 个字符")
+    return clean
 
 
-def save_custom_words(words: dict) -> None:
+def normalize_custom_words(value: object) -> dict[str, list[str]]:
+    """Validate and normalize the complete custom dictionary without truncation."""
+    if not isinstance(value, dict):
+        raise ValueError("自定义词库必须按分类组织")
+    if len(value) > MAX_CUSTOM_CATEGORIES:
+        raise ValueError(f"自定义词库分类数上限 {MAX_CUSTOM_CATEGORIES}")
+
+    clean: dict[str, list[str]] = {}
+    total = 0
+    for raw_category, raw_words in value.items():
+        category = _clean_text(
+            raw_category,
+            label="分类名",
+            maximum=MAX_CUSTOM_CATEGORY_CHARS,
+        )
+        if category in clean:
+            raise ValueError("去除首尾空白后出现重复分类名")
+        if not isinstance(raw_words, list):
+            raise ValueError("每个分类的词条必须是列表")
+        total += len(raw_words)
+        if total > MAX_CUSTOM_WORDS:
+            raise ValueError(f"自定义词条总数上限 {MAX_CUSTOM_WORDS}")
+        words = [
+            _clean_text(word, label="自定义词条", maximum=MAX_CUSTOM_WORD_CHARS)
+            for word in raw_words
+        ]
+        clean[category] = list(dict.fromkeys(words))
+    return clean
+
+
+def get_custom_words() -> dict[str, list[str]]:
+    """读取用户自定义合规词库（按分类组织的可持久化扩展词表）"""
+    words_file = get_output_dir() / ".custom_compliance.json"
+    try:
+        return normalize_custom_words(
+            read_json(words_file, max_bytes=MAX_CUSTOM_COMPLIANCE_BYTES)
+        )
+    except FileNotFoundError:
+        return {}
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ComplianceWordsError(
+            "自定义合规词库不可用，请修复或删除 .custom_compliance.json 后重试"
+        ) from exc
+
+
+def save_custom_words(words: object) -> None:
     words_file = get_output_dir() / ".custom_compliance.json"
     words_file.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(words_file, words)
+    atomic_write_json(words_file, normalize_custom_words(words))
 
 
 def scan_text(text: str) -> list:
@@ -54,7 +110,10 @@ def scan_text(text: str) -> list:
     for category, words in get_custom_words().items():
         merged.setdefault(category, [])
         existing = set(merged[category])
-        merged[category].extend(w for w in words if w and w not in existing)
+        for word in words:
+            if word not in existing:
+                merged[category].append(word)
+                existing.add(word)
     for category, words in merged.items():
         for word in words:
             count = text.count(word)

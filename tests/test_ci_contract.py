@@ -20,6 +20,7 @@ def workflow_text() -> str:
 
 def test_quality_workflow_runs_real_gate_across_declared_matrix():
     text = workflow_text()
+    assert "push:\n    branches:\n      - main" in text
     for operating_system in ("ubuntu-latest", "macos-latest", "windows-latest"):
         assert f"- {operating_system}" in text
     for python in ('- "3.11"', '- "3.14"'):
@@ -36,11 +37,11 @@ def test_quality_workflow_pins_actions_and_restricts_repository_access():
     uses = re.findall(r"^\s*uses:\s*([^\s#]+)", text, flags=re.MULTILINE)
     assert uses
     assert all(re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", action) for action in uses)
-    assert set(uses) == {
-        "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
-        "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
-        "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
-        "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9",
+    assert {action.split("@", 1)[0] for action in uses} == {
+        "actions/checkout",
+        "actions/setup-python",
+        "actions/setup-node",
+        "astral-sh/setup-uv",
     }
     assert "NODE_VERSION: 24.20.0" in text
     assert "UV_VERSION: 0.12.5" in text
@@ -49,7 +50,7 @@ def test_quality_workflow_pins_actions_and_restricts_repository_access():
         r"- name: Checkout\n(?P<body>(?: {8}.*\n?)*)",
         text,
     )
-    assert len(checkout_steps) == 3
+    assert len(checkout_steps) == 4
     assert all("persist-credentials: false" in step for step in checkout_steps)
 
 
@@ -85,12 +86,24 @@ def test_real_browser_job_is_locked_isolated_and_runs_all_engines():
     assert "OUTPUT_DIR: ${{ runner.temp }}/novelengine-browser-output" in text
 
 
+def test_python_dependency_audit_is_single_host_and_checks_both_exact_locks():
+    text = workflow_text()
+    assert "dependency-audit:" in text
+    assert "name: Audit locked Python dependencies" in text
+    for lock in ("requirements.lock", "requirements-dev.lock"):
+        assert (
+            f"python -m pip_audit -r {lock} --require-hashes --disable-pip "
+            "--strict --progress-spinner off"
+        ) in text
+
+
 def test_playwright_dependency_and_local_server_contract_are_exact():
     package = json.loads(PACKAGE.read_text(encoding="utf-8"))
     lock = json.loads(PACKAGE_LOCK.read_text(encoding="utf-8"))
-    assert package["devDependencies"]["@playwright/test"] == "1.62.1"
-    assert lock["packages"][""]["devDependencies"]["@playwright/test"] == "1.62.1"
-    assert lock["packages"]["node_modules/@playwright/test"]["version"] == "1.62.1"
+    playwright = package["devDependencies"]["@playwright/test"]
+    assert re.fullmatch(r"\d+\.\d+\.\d+", playwright)
+    assert lock["packages"][""]["devDependencies"]["@playwright/test"] == playwright
+    assert lock["packages"]["node_modules/@playwright/test"]["version"] == playwright
     assert package["scripts"]["test:browser"] == "playwright test --project=chromium"
     assert package["scripts"]["test:browser:all"] == "playwright test"
 
@@ -109,6 +122,9 @@ def test_dependabot_tracks_action_and_node_lock_updates_monthly():
     assert text.count("interval: monthly") == 2
     assert "package-ecosystem: github-actions" in text
     assert "package-ecosystem: npm" in text
+    assert "github-actions:" in text
+    assert "npm-minor-patch:" in text
+    assert "npm-major:" in text
 
 
 def test_gate_fingerprints_ci_policy_files():

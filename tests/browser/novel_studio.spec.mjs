@@ -48,6 +48,13 @@ async function waitForNewCompletedTask(page, previousTaskId, novelId, expectedSt
         if (status.task_id === previousTaskId || status.is_running || status.error) return '';
         return `${status.current_novel}|${status.current_step}|${status.progress}`;
     }, { timeout: 30_000 }).toBe(`${novelId}|${expectedStep}|100`);
+    await expect.poll(async () => {
+        const response = await page.request.get(`/api/novel/${novelId}`);
+        if (!response.ok()) return false;
+        const project = await response.json();
+        const browserRevision = await page.evaluate(() => novelData?.revision || '');
+        return browserRevision === project.revision;
+    }, { timeout: 10_000 }).toBe(true);
 }
 
 test('loads the offline library with security headers and named workspace landmarks', async ({ page }) => {

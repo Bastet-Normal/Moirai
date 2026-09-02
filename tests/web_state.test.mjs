@@ -49,6 +49,8 @@ class Element {
 
 function setup({workspace = false} = {}) {
     const elements = new Map();
+    const timers = [];
+    let nextTimerId = 1;
     const document = {
         handlers: new Map(),
         getElementById(id) {
@@ -66,13 +68,23 @@ function setup({workspace = false} = {}) {
         },
         activeElement: new Element(),
         documentElement: new Element('html'),
+        hidden: false,
     };
     const requests = [];
     const context = vm.createContext({
         document,
-        window: {addEventListener() {}},
+        window: {addEventListener() {}, matchMedia: () => ({matches: false})},
         requestAnimationFrame: callback => callback(),
-        setTimeout() {}, setInterval() {}, clearTimeout() {},
+        setTimeout(callback, delay) {
+            const timer = {id: nextTimerId++, callback, delay, cancelled: false};
+            timers.push(timer);
+            return timer.id;
+        },
+        setInterval() {},
+        clearTimeout(id) {
+            const timer = timers.find(item => item.id === id);
+            if (timer) timer.cancelled = true;
+        },
         fetch: (url, options = {}) => new Promise((resolve, reject) => requests.push({url, options, resolve, reject})),
     });
     const run = code => vm.runInContext(code, context);
@@ -95,7 +107,7 @@ function setup({workspace = false} = {}) {
         novelData = {novel_id: currentNovelId, revision: ${JSON.stringify(revision)}, chapters: []};
         novelLoadToken++;
     `);
-    return {run, requests, respond, bind, document, el: id => document.getElementById(id)};
+    return {run, requests, respond, bind, document, timers, el: id => document.getElementById(id)};
 }
 
 function detail(id, revision = id.repeat(64).slice(0, 64)) {
@@ -458,7 +470,7 @@ test('late selection errors cannot hide the newly selected book', async () => {
     const old = s.run("selectNovel('a')");
     const latest = s.run("selectNovel('b')");
     s.respond(s.requests[2], detail('b'));
-    s.respond(s.requests[3], {chapters: []});
+    s.respond(s.requests[3], {revision: 'b'.repeat(64), chapters: []});
     await latest;
     s.requests[0].reject(new Error('old request disconnected'));
     s.respond(s.requests[1], {});
@@ -814,6 +826,41 @@ test('task polling never overlaps slow requests or steals the current book', asy
     assert.equal(s.run('pollInFlight'), false);
 });
 
+test('status polling backs off while idle and hidden but stays responsive during work', async () => {
+    const s = setup();
+    assert.equal(s.run('statusPollDelay()'), 8000);
+    s.run("expectedTaskId='pending'");
+    assert.equal(s.run('statusPollDelay()'), 1600);
+    s.document.hidden = true;
+    assert.equal(s.run('statusPollDelay()'), 30000);
+    s.document.hidden = false;
+
+    s.run("expectedTaskId=''; pollStatus()");
+    s.respond(s.requests[0], {is_running:false,current_step:'待命',task_id:''});
+    await new Promise(resolve => setImmediate(resolve));
+    const activeTimers = s.timers.filter(timer => !timer.cancelled);
+    assert.equal(activeTimers.at(-1).delay, 8000);
+});
+
+test('welcome typewriter stops outside the welcome view and resumes when visible', () => {
+    const s = setup();
+    s.run('syncHeroTypewriter()');
+    assert.notEqual(s.run('heroTimer'), null);
+    assert.equal(s.el('hero-typing').textContent.length, 1);
+
+    s.el('welcome-view').classList.add('hidden');
+    s.run('syncHeroTypewriter()');
+    assert.equal(s.run('heroTimer'), null);
+
+    s.el('welcome-view').classList.remove('hidden');
+    s.document.hidden = true;
+    s.run('syncHeroTypewriter()');
+    assert.equal(s.run('heroTimer'), null);
+    s.document.hidden = false;
+    s.run('syncHeroTypewriter()');
+    assert.notEqual(s.run('heroTimer'), null);
+});
+
 test('starting task polling requests status immediately instead of waiting for the interval', async () => {
     const s = setup();
     s.run('pollStatus()');
@@ -848,6 +895,17 @@ test('a failed poll releases the in-flight guard for the next attempt', async ()
     assert.equal(s.requests.length, 2);
     s.respond(s.requests[1], {is_running:false});
     await retry;
+});
+
+test('custom compliance load failures preserve local state and surface the server warning', async () => {
+    const s = setup();
+    s.run("window._customWords={保留:['旧词']}");
+    const loading = s.run('reloadCustomWords()');
+    s.respond(s.requests[0], {detail:'自定义合规词库不可用'}, 503);
+    assert.equal(await loading, false);
+    assert.equal(s.run("window._customWords['保留'][0]"), '旧词');
+    assert.equal(s.run('window._customWordsAvailable'), false);
+    assert.equal(s.run('toasts.at(-1).type'), 'error');
 });
 
 test('palette arrow keys move one option, update ARIA and stop duplicate bubbling', () => {

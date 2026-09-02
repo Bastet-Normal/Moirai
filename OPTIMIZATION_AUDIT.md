@@ -1,6 +1,6 @@
 # Optimization audit
 
-Updated: 2026-09-01. Objective: 全方面无死角自主决策完善优化.
+Updated: 2026-09-03. Objective: 全方面无死角自主决策完善优化.
 Status: **active**, not a claim that all optimization work is complete.
 
 ## Verified this pass
@@ -13,7 +13,7 @@ Status: **active**, not a claim that all optimization work is complete.
 - Backup publication is locked, exceptions close archive handles, export rejects links outside the project and cleans temporary files on failure.
 - Test fixtures are isolated from user projects. The two legacy test suites no longer delete a fixed `test_output` folder or write fixtures under the actual output root.
 - Ruff, pytest-cov and pip-audit are declared and executable. Runtime dependency declarations have major-version bounds. `scripts/check.py` provides a repeatable gate, including CLI and browser JavaScript syntax.
-- A least-privilege hosted workflow now defines the locked gate across Ubuntu, macOS and Windows with Python 3.11/3.14. All Actions are pinned to full commit SHAs, checkout credentials are discarded, provider access is disabled, and a separate Node job audits and deterministically rebuilds checked-in assets. Dependabot covers Action and npm updates monthly. Contract tests and `actionlint` validate the configuration; no hosted run is claimed yet.
+- A least-privilege hosted workflow runs the locked gate across Ubuntu, macOS and Windows with Python 3.11/3.14. Main run `33674189606` completed the six Python combinations, deterministic asset rebuild and Chromium/Firefox/WebKit matrix. Actions remain pinned to full commit SHAs, checkout credentials are discarded and provider access is disabled. Push runs are now limited to `main`, Python lock auditing is a single dedicated job, and Dependabot updates are grouped instead of producing duplicate heavy matrices.
 - Multi-file mutations now have bounded, durable undo journals. Fault tests inject failures after every chapter file publication and real child-process exits before/after commit and during recovery. Pre-commit recovery restores the exact old file set; committed writes survive lost acknowledgement and restart.
 - Interrupted rename/delete are discoverable even when the original project name is absent. Readers do not undo live writers; imports recover a pending delete before deciding the name is available.
 - Recovery checks path confinement and every original-file checksum before changing files, checkpoints completed undo operations, and keeps damaged journals for inspection. Windows case aliases no longer bypass journaling or change restored filenames.
@@ -24,7 +24,10 @@ Status: **active**, not a claim that all optimization work is complete.
 - Locally stamped text digests bind audit reports to their drafts. Full loads/saves verify the final report; metadata/API/reader show its status instead of the last attempt. Manual edits and unverifiable legacy reports cannot retain a stale passed label.
 - Extraction-failure markers now commit atomically with prose. A fault test proves that failure to write the marker rolls back the entire generation. Downstream writing stops until earlier state is reconciled.
 - The LLM transport has an application-owned retry budget, closes failed streams, honors bounded `Retry-After`, rejects truncated/oversized output, preserves JSON string values, downgrades unsupported parameters only on explicit provider errors, and swaps credentials through concurrency-safe leases. Twenty-four transport tests include actual SDK SSE parsing without external model calls.
-- Full-book Markdown/TXT exports are coalesced instead of rebuilt after every chapter save. A 1,000-chapter, 2.5-million-character benchmark completed in 3.253 seconds and produced about 7.5 MiB of output on this host.
+- Full-book Markdown/TXT exports are coalesced instead of rebuilt after every chapter save. The current 1,000-chapter, 2.5-million-character benchmark completed in 4.202 seconds and produced about 7.5 MiB of output on this host.
+- Custom compliance storage now uses a 128 KiB bounded regular-file read and the same validation on API save and disk load. Malformed structure, excessive categories/terms, invalid Unicode and NUL fail closed with a safe 503/UI warning; neither the scanner nor the interface converts failure into a false clean result or an empty overwrite.
+- Status polling remains at 1.6 seconds for active work, backs off to 8 seconds while idle and 30 seconds in a hidden tab, with only one request in flight. The welcome typewriter stops when its view is hidden and resumes on return. Production-script tests cover these transitions, and the real three-engine workflow waits for revision synchronization between consecutive background jobs.
+- Generation report timestamps are timezone-aware UTC. Ruff now enforces the additional `PERF401`, `RET504` and `PLW2901` rules that exposed three low-risk cleanup opportunities.
 - Archive extraction now counts actual streamed bytes and validates every staged aggregate, active chapter, metadata shard, graph, memory shard, state event and snapshot before atomic publication. Partial legacy metadata is completed from canonical chapter shards rather than hiding chapters.
 - Deleted projects can be listed and restored in-app. Restore validates trash identity, refuses conflicts, participates in task reservation/project locks, and was exercised end-to-end in an isolated browser project root.
 - Runtime configuration is a transaction spanning dotenv, process environment, validated settings and the live LLM client. A failed client swap restores all layers; concurrent config/generation requests are serialized.
@@ -137,9 +140,8 @@ unsafe rollback point. Neither real project was modified.
 ## Remaining work (do not treat these as verified)
 
 1. **Platform and storage evidence.** Python 3.11/3.12/3.14 and Windows process-crash
-   recovery are exercised. A hosted Ubuntu/macOS/Windows CI matrix is defined and
-   locally linted, but no hosted run is available in this non-Git workspace; POSIX execution, physical power
-   loss, disk damage, hostile external edits and unusual/network filesystems remain
+   recovery are exercised. The hosted Ubuntu/macOS/Windows Python 3.11/3.14 matrix has
+   completed successfully. Physical power loss, disk damage, hostile external edits and unusual/network filesystems remain
    unverified; do not generalize current durability evidence to them. Corrupt
    journals now fail closed with guided, path-free diagnostics, but actual expert
    repair or deletion remains deliberately manual and backup-first.
@@ -159,8 +161,8 @@ unsafe rollback point. Neither real project was modified.
    isolation. A locked real-browser smoke matrix now covers the disposable library,
    workspace landmarks, security headers, compliance focus/paragraph navigation,
    keyboard tab switching and 320/390/768/1024px layout across Chromium, Firefox and
-   WebKit on Windows. The hosted Linux matrix repeats the same suite but is not yet
-   claimed executed. Production-script tests now cover important
+   WebKit on Windows. The hosted Linux matrix has also completed successfully.
+   Production-script tests now cover important
    late-response/polling races and HTML tests guard dialog boundaries. A complete
    automated browser matrix for create/plan and every read/edit tool, screen readers,
    rolling-outline extension across volume boundaries, every read/edit tool, screen readers,

@@ -38,7 +38,13 @@ from api.schemas import (
     RenameRequest,
     RollbackRequest,
 )
-from config.compliance_words import scan_text
+from config.compliance_words import (
+    COMPLIANCE_CATEGORIES,
+    ComplianceWordsError,
+    get_custom_words,
+    save_custom_words,
+    scan_text,
+)
 from config.settings import BASE_DIR, get_output_dir, get_settings
 from core.error_reporting import SafeUserMessage, report_internal_error, safe_user_message
 from core.llm import get_llm_client
@@ -640,6 +646,12 @@ async def chapter_text_limit_handler(request: Request, exc: ChapterTextLimitErro
     return JSONResponse(status_code=422, content={"detail": detail})
 
 
+@app.exception_handler(ComplianceWordsError)
+async def compliance_words_handler(request: Request, exc: ComplianceWordsError):
+    detail = safe_user_message(exc, fallback="自定义合规词库不可用")
+    return JSONResponse(status_code=503, content={"detail": detail})
+
+
 @app.post("/api/novel/branch_simulate")
 def branch_simulate(req: BranchSimRequest, background_tasks: BackgroundTasks):
     _require_project(req.name)
@@ -1091,14 +1103,12 @@ def para_rewrite_apply(novel_id: str, req: ParaRewriteApplyRequest):
 
 @app.get("/api/compliance/custom_words")
 def get_custom_words_api():
-    from config.compliance_words import COMPLIANCE_CATEGORIES, get_custom_words
     return {"custom_words": get_custom_words(), "builtin_categories": list(COMPLIANCE_CATEGORIES.keys())}
 
 
 @app.post("/api/compliance/custom_words")
 def save_custom_words_api(req: CustomWordsRequest):
     """保存用户自定义合规词库（全量覆盖，前端负责合并内置展示）"""
-    from config.compliance_words import save_custom_words
     clean = req.words
     save_custom_words(clean)
     return {"status": "success", "message": f"已保存 {sum(len(v) for v in clean.values())} 条自定义词"}
