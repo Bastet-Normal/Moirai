@@ -1,0 +1,30 @@
+# Secrets and local configuration
+.env
+!.env.example
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.quality/
+.venv/
+venv/
+node_modules/
+playwright-report/
+test-results/
+
+# Generated novels, exports and transient logs
+novel_projects/
+*.log
+*_backup.zip
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

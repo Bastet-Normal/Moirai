@@ -1,0 +1,22 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["novel_projects", "web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
+
+[tool.coverage.run]
+branch = true
+source = ["agents", "api", "config", "core", "pipeline", "services", "main", "web_ui"]
+omit = ["tests/*", "novel_projects/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
