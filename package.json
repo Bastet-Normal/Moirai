@@ -8,7 +8,7 @@
     "build:web": "tailwindcss -i web/tailwind.input.css -o web/assets/tailwind.min.css --minify && node scripts/build_web_assets.mjs"
   },
   "devDependencies": {
-    "@fortawesome/fontawesome-free": "6.7.2",
+    "@fortawesome/fontawesome-free": "7.3.1",
     "@playwright/test": "1.62.1",
     "@tailwindcss/cli": "4.3.3",
     "cytoscape": "3.34.2",
