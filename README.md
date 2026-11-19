@@ -299,16 +299,13 @@ npm audit
 真实浏览器门禁使用隔离的离线演示服务，不调用模型，也不读写正式作品：
 
 ```bash
-npx --no-install playwright install webkit
-npm run test:browser                 # 本机快速跑 WebKit
-npx --no-install playwright install chromium firefox webkit
-npm run test:browser:all              # Chromium / Firefox / WebKit
+/usr/bin/safaridriver --enable       # macOS 上首次启用网页自动化
+npm run test:browser
 ```
 
-托管 CI 会显式安装三种浏览器及系统依赖，并拒绝任何回环地址之外的 HTTP(S)
-请求；浏览器缓存、演示项目和测试产物都位于临时目录。浏览器门禁通过只证明
-页面、交互和安全边界，不代表真实模型输出质量。三引擎门禁还会在隔离目录中
-执行真实 ZIP 备份下载、删除、文件控件导入、正文核对、章节回滚和回收站恢复；
+托管 CI 用 macOS 上的原生 Safari 跑这套回归，检查回环地址之外的 HTTP(S)
+请求。演示项目使用临时目录。Safari 会先把测试导出写入下载目录，门禁读取实际文件并清理测试文件。
+门禁还会执行真实 ZIP 备份下载、删除、文件控件导入、正文核对、章节回滚和回收站恢复；
 也会用确定性的离线模型替身走完“新建作品 → 分阶段策划检查点 → 总纲校验 →
 后台生成首章 → 审计与状态提交 → 书架自动刷新 → 续写至三章 → 后台读者/分支推演 →
 自动宣发 → 改细纲并整章重写 → 旧派生结果失效 → 显式重建短剧、有声和宣发”。未被显式替换的模型调用
@@ -319,7 +316,7 @@ npm run test:browser:all              # Chromium / Firefox / WebKit
 
 质量门禁会逐步复核源码、前端资产和依赖锁指纹；验收中途修改代码会判为失败。每次运行将结果保存到 `.quality/check-py<主版本>.<次版本>.json`，区分通过、失败、部分完成与未完成；缺少 Node.js 的验收不会标记为完整通过。报告不读取密钥或真实作品。
 
-`.github/workflows/quality.yml` 在 Ubuntu、macOS、Windows 的 Python 3.11/3.14 矩阵中运行同一套锁定门禁，并用独立任务从 `package-lock.json` 重建前端资产、执行浏览器状态测试和高危漏洞审计；另一个任务在隔离演示服务上运行 Chromium、Firefox、WebKit 三引擎真实浏览器冒烟，Python 两份精确锁文件则只做一次联网漏洞审计。工作流只授予仓库读取权限，第三方 Action 固定到完整提交 SHA，checkout 不保留凭据；测试环境使用空模型密钥、不可达的本机端点和 runner 临时作品目录。主分支的托管矩阵已经在三种系统和三种浏览器上完整通过；普通分支 push 不重复运行 PR 矩阵，Dependabot 也按生态和更新级别合并月度更新。
+`.github/workflows/quality.yml` 在 Ubuntu、macOS、Windows 的 Python 3.11/3.14 矩阵中运行同一套锁定门禁，并用独立任务从 `package-lock.json` 重建前端资产、执行浏览器状态测试和高危漏洞审计；另一个任务在隔离演示服务上运行原生 Safari 浏览器冒烟，Python 两份精确锁文件则只做一次联网漏洞审计。工作流只授予仓库读取权限，第三方 Action 固定到完整提交 SHA，checkout 不保留凭据；测试环境使用空模型密钥、不可达的本机端点和 runner 临时作品目录。普通分支 push 不重复运行 PR 矩阵，Dependabot 也按生态和更新级别合并月度更新。
 
 并发写入同一作品会明确返回忙碌（HTTP 423）；状态副本过期会返回冲突（HTTP 409），刷新后再操作。生成期间可以继续阅读。轻量加载或发现文件损坏的状态视图禁止写入，避免用缺失数据覆盖项目。
 

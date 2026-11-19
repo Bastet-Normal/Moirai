@@ -74,16 +74,21 @@ def test_frontend_job_uses_locks_audit_and_rejects_asset_drift():
         assert command in text
 
 
-def test_real_browser_job_is_locked_isolated_and_runs_all_engines():
+def test_browser_job_is_locked_isolated_and_runs_native_safari():
     text = workflow_text()
+    browser = text.split("  browser-smoke:\n", 1)[1].split("  dependency-audit:\n", 1)[0]
     for command in (
-        "npx --no-install playwright install --with-deps chromium firefox webkit",
-        "npm run test:browser:all",
+        "runs-on: macos-latest",
+        "sudo safaridriver --enable",
+        "npm ci --ignore-scripts",
+        "npm audit --audit-level=high",
+        "npm run test:browser",
     ):
-        assert command in text
-    assert "PLAYWRIGHT_BASE_URL: http://127.0.0.1:8769" in text
-    assert "PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers" in text
-    assert "OUTPUT_DIR: ${{ runner.temp }}/novelengine-browser-output" in text
+        assert command in browser
+    assert "SAFARI_BASE_URL: http://127.0.0.1:8769" in browser
+    assert "playwright install" not in browser
+    assert "PLAYWRIGHT_BROWSERS_PATH" not in browser
+    assert "OUTPUT_DIR: ${{ runner.temp }}/novelengine-browser-output" in browser
 
 
 def test_python_dependency_audit_is_single_host_and_checks_both_exact_locks():
@@ -104,9 +109,12 @@ def test_playwright_dependency_and_local_server_contract_are_exact():
     assert re.fullmatch(r"\d+\.\d+\.\d+", playwright)
     assert lock["packages"][""]["devDependencies"]["@playwright/test"] == playwright
     assert lock["packages"]["node_modules/@playwright/test"]["version"] == playwright
-    assert package["scripts"]["test:browser"] == "playwright test --project=webkit"
-    assert package["scripts"]["test:browser:chromium"] == "playwright test --project=chromium"
-    assert package["scripts"]["test:browser:all"] == "playwright test"
+    safari = package["devDependencies"]["selenium-webdriver"]
+    assert re.fullmatch(r"\d+\.\d+\.\d+", safari)
+    assert lock["packages"][""]["devDependencies"]["selenium-webdriver"] == safari
+    assert lock["packages"]["node_modules/selenium-webdriver"]["version"] == safari
+    assert package["scripts"]["test:browser"] == "playwright test"
+    assert {key for key in package["scripts"] if key.startswith("test:browser")} == {"test:browser"}
 
     config = PLAYWRIGHT_CONFIG.read_text(encoding="utf-8")
     assert "http://127.0.0.1:8769" in config
@@ -114,8 +122,10 @@ def test_playwright_dependency_and_local_server_contract_are_exact():
     assert "reuseExistingServer: false" in config
     assert "OPENAI_API_KEY: ''" in config
     assert "OPENAI_BASE_URL: 'http://127.0.0.1:9/v1'" in config
-    for engine in ("chromium", "firefox", "webkit"):
-        assert f"name: '{engine}'" in config
+    assert re.findall(r"name:\s*'([^']+)'", config) == ["safari"]
+    driver = (ROOT / "tests/browser/native-safari.mjs").read_text(encoding="utf-8")
+    assert "/usr/bin/safaridriver" in driver
+    assert ".forBrowser('safari')" in driver
 
 
 def test_dependabot_tracks_action_and_node_lock_updates_monthly():
@@ -134,3 +144,6 @@ def test_gate_fingerprints_ci_policy_files():
     assert ".github/dependabot.yml" in inputs
     assert "playwright.config.mjs" in inputs
     assert "tests/browser/novel_studio.spec.mjs" in inputs
+    assert "tests/browser/native-safari.mjs" in inputs
+    assert "tests/browser/serve_safari_demo.py" in inputs
+    assert "tests/browser/observer.js" in inputs
