@@ -73,7 +73,10 @@ test('opens all compliance findings and locates the selected paragraph', async (
     await expect.poll(() => panel.isVisible()).toBe(true);
     const findings = panel.getByRole('button', { name: /^定位合规风险：/ });
     await expect.poll(() => findings.count()).toBe(2);
-    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label')), { timeout: 5_000 })
+    await expect.poll(() => page.evaluate(() => {
+        const active = document.activeElement;
+        return active?.getAttribute('aria-label') ?? `active=${active?.tagName}#${active?.id}, hasFocus=${document.hasFocus()}`;
+    }), { timeout: 5_000 })
         .toBe(await findings.first().getAttribute('aria-label'));
 
     await findings.nth(1).click();
@@ -134,7 +137,7 @@ test('searches lazy chapter prose and jumps without changing the project revisio
     await expect.poll(() => page.evaluate(() => window.safariShortcut)).toEqual(['k', true]);
     const search = page.getByRole('combobox', { name: '搜索作品、章节或操作', exact: true });
     await expect.poll(() => search.isVisible()).toBe(true);
-    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('palette-input');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id || `active=${document.activeElement?.tagName}, hasFocus=${document.hasFocus()}`)).toBe('palette-input');
     await search.fill('远处的灯火');
     const chapterOne = page.getByRole('option', { name: /第1章 旅程 1/ });
     await expect.poll(() => chapterOne.isVisible(), {timeout:10000}).toBe(true);
