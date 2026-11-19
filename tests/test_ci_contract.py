@@ -104,7 +104,8 @@ def test_playwright_dependency_and_local_server_contract_are_exact():
     assert re.fullmatch(r"\d+\.\d+\.\d+", playwright)
     assert lock["packages"][""]["devDependencies"]["@playwright/test"] == playwright
     assert lock["packages"]["node_modules/@playwright/test"]["version"] == playwright
-    assert package["scripts"]["test:browser"] == "playwright test --project=chromium"
+    assert package["scripts"]["test:browser"] == "playwright test --project=webkit"
+    assert package["scripts"]["test:browser:chromium"] == "playwright test --project=chromium"
     assert package["scripts"]["test:browser:all"] == "playwright test"
 
     config = PLAYWRIGHT_CONFIG.read_text(encoding="utf-8")

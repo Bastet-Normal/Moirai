@@ -299,8 +299,9 @@ npm audit
 真实浏览器门禁使用隔离的离线演示服务，不调用模型，也不读写正式作品：
 
 ```bash
-npx --no-install playwright install chromium
-npm run test:browser                 # 本机快速跑 Chromium
+npx --no-install playwright install webkit
+npm run test:browser                 # 本机快速跑 WebKit
+npx --no-install playwright install chromium firefox webkit
 npm run test:browser:all              # Chromium / Firefox / WebKit
 ```
 
