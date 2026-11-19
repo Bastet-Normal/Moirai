@@ -493,8 +493,9 @@ The real-browser smoke gate is separate from the minimal-DOM state suite. It sta
 engines, and exercises Chromium, Firefox and WebKit against disposable projects:
 
 ```bash
-npx --no-install playwright install chromium
+npx --no-install playwright install webkit
 npm run test:browser
+npx --no-install playwright install chromium firefox
 npm run test:browser:all
 ```
 

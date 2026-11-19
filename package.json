@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test:web": "node --test tests/web_state.test.mjs",
-    "test:browser": "playwright test --project=chromium",
+    "test:browser": "playwright test --project=webkit",
+    "test:browser:chromium": "playwright test --project=chromium",
     "test:browser:all": "playwright test",
     "build:web": "tailwindcss -i web/tailwind.input.css -o web/assets/tailwind.min.css --minify && node scripts/build_web_assets.mjs"
   },
