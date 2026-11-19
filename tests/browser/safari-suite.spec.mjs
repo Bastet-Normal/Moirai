@@ -73,7 +73,8 @@ test('opens all compliance findings and locates the selected paragraph', async (
     await expect.poll(() => panel.isVisible()).toBe(true);
     const findings = panel.getByRole('button', { name: /^定位合规风险：/ });
     await expect.poll(() => findings.count()).toBe(2);
-    await expect.poll(() => findings.first().focused(), { timeout: 2_000 }).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label')), { timeout: 5_000 })
+        .toBe(await findings.first().getAttribute('aria-label'));
 
     await findings.nth(1).click();
     const paragraphs = page.locator('#current-chapter-body .reader-para');
@@ -122,7 +123,8 @@ test('searches lazy chapter prose and jumps without changing the project revisio
     await expect.poll(() => page.getByRole('article', { name: '第 2 章 旅程 2', exact: true }).isVisible()).toBe(true);
     const before = await (await page.request.get('/api/novel/demo_alpha')).json();
 
-    await page.keyboard.press('Control+K');
+    await directory.getByRole('button', { name: /第2章 旅程 2/ }).focus();
+    await page.keyboard.press('Meta+K');
     const search = page.getByRole('combobox', { name: '搜索作品、章节或操作', exact: true });
     await expect.poll(() => search.focused()).toBe(true);
     await search.fill('远处的灯火');
@@ -217,8 +219,7 @@ test('round-trips a real backup through deletion, import, rollback and trash res
     await expect.poll(() => page.getByRole('navigation', { name: '章节目录', exact: true })
         .getByRole('button', { name: /第2章 旅程 2/ }).count()).toBe(0);
 
-    // All Playwright projects share this disposable webServer. Restore the
-    // original two-chapter fixture before the next engine starts.
+    // Restore the original two-chapter fixture for subsequent scenarios.
     const deleteRolledBackAlpha = page.getByRole('button', { name: '删除作品：雾港来信', exact: true });
     await deleteRolledBackAlpha.click({ force: true });
     await expect.poll(() => confirm.getAttribute('class')).toMatch(/open/);
@@ -257,7 +258,7 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     test.setTimeout(45_000);
     const response = await page.goto('/');
     expect(response?.ok).toBeTruthy();
-    const projectId = `browser_created_${testInfo.project.name}`;
+    const projectId = `browser_created_${testInfo.project.name}_${testInfo.retry}`;
 
     await page.getByRole('button', { name: '新建作品', exact: true }).first().click();
     const create = page.locator('#modal-create');

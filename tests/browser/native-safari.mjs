@@ -72,10 +72,14 @@ export async function launchSafari() {
           const el = await first()
           await driver.executeScript("arguments[0].focus(); Object.getOwnPropertyDescriptor(Object.getPrototypeOf(arguments[0]),'value').set.call(arguments[0],arguments[1]); arguments[0].dispatchEvent(new Event('input',{bubbles:true})); arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",el,value)
         },
-        async setInputFiles({name,buffer}) {
-          const file = join(scratch,name)
-          await writeFile(file,buffer)
-          await (await first()).sendKeys(file)
+        async setInputFiles({name, mimeType, buffer}) {
+          await driver.executeScript((input, name, type, encoded) => {
+            const bytes = Uint8Array.from(atob(encoded), byte => byte.charCodeAt(0))
+            const transfer = new DataTransfer()
+            transfer.items.add(new File([bytes], name, {type}))
+            input.files = transfer.files
+            input.dispatchEvent(new Event('change', {bubbles: true}))
+          }, await first(), name, mimeType, buffer.toString('base64'))
         },
         count: async () => (await matches()).length,
         textContent: async () => (await first()).getProperty('textContent'),
@@ -128,7 +132,7 @@ export async function launchSafari() {
       },
       screenshot: async ({path}) => writeFile(path, Buffer.from(await driver.takeScreenshot(),'base64')),
       waitForTimeout: delay,
-      keyboard: { press: async key => key === 'Control+K' ? driver.actions().keyDown(Key.CONTROL).sendKeys('k').keyUp(Key.CONTROL).perform() : driver.actions().sendKeys(key==='Escape'?Key.ESCAPE:key).perform() },
+      keyboard: { press: async key => key === 'Meta+K' ? driver.actions().keyDown(Key.COMMAND).keyDown('k').keyUp('k').keyUp(Key.COMMAND).perform() : driver.actions().sendKeys(key==='Escape'?Key.ESCAPE:key).perform() },
       mouse: {click: (x,y) => driver.actions().move({x:Math.round(x),y:Math.round(y)}).click().perform()}
     }
   }
