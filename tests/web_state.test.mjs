@@ -75,6 +75,7 @@ function setup({workspace = false} = {}) {
         document,
         window: {addEventListener() {}, matchMedia: () => ({matches: false})},
         requestAnimationFrame: callback => callback(),
+        getComputedStyle: element => ({visibility: element.style.visibility ?? "visible"}),
         setTimeout(callback, delay) {
             const timer = {id: nextTimerId++, callback, delay, cancelled: false};
             timers.push(timer);

@@ -83,11 +83,11 @@ jobs:
         run: git diff --exit-code -- web/assets
 
   browser-smoke:
-    name: Real browser smoke matrix
-    runs-on: ubuntu-latest
+    name: Native Safari browser smoke
+    runs-on: macos-latest
     timeout-minutes: 30
     env:
-      PLAYWRIGHT_BASE_URL: http://127.0.0.1:8769
+      SAFARI_BASE_URL: http://127.0.0.1:8769
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,16 +108,13 @@ jobs:
           version: ${{ env.UV_VERSION }}
       - name: Install locked Node dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
-      - name: Install the locked Playwright browser engines and OS libraries
-        run: npx --no-install playwright install --with-deps chromium firefox webkit
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
+      - name: Enable native Safari WebDriver
+        run: sudo safaridriver --enable
       - name: Audit Node dependency severity
         run: npm audit --audit-level=high
-      - name: Run the isolated real-browser matrix
-        run: npm run test:browser:all
+      - name: Run the isolated native Safari smoke
+        run: npm run test:browser
         env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
           OUTPUT_DIR: ${{ runner.temp }}/novelengine-browser-output
 
   dependency-audit:

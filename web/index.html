@@ -706,7 +706,7 @@
                                     <button class="icon-btn !border-0 !rounded-none !w-8 !h-8" onclick="adjustFont(-1)" title="减小字号" aria-label="减小字号"><i aria-hidden="true" class="fa-solid fa-minus text-[10px]"></i></button>
                                     <button class="icon-btn !border-0 !rounded-none !w-8 !h-8" onclick="adjustFont(1)" title="增大字号" aria-label="增大字号"><i aria-hidden="true" class="fa-solid fa-plus text-[10px]"></i></button>
                                 </div>
-                                <button id="compliance-chip" type="button" class="chip chip-danger hidden cursor-pointer" onclick="openCompliancePanel(this)" title="查看合规风险" aria-label="查看合规风险" aria-controls="reader-rail" aria-expanded="false"><i aria-hidden="true" class="fa-solid fa-triangle-exclamation"></i> <span id="compliance-count"></span></button>
+                                <button id="compliance-chip" type="button" tabindex="0" class="chip chip-danger hidden cursor-pointer" onclick="openCompliancePanel(this)" title="查看合规风险" aria-label="查看合规风险" aria-controls="reader-rail" aria-expanded="false"><i aria-hidden="true" class="fa-solid fa-triangle-exclamation"></i> <span id="compliance-count"></span></button>
                                 <button id="btn-audit-history" class="btn btn-outline btn-sm" onclick="openAuditHistoryModal()" title="查看机器质检与人工审阅历史" disabled><i aria-hidden="true" class="fa-solid fa-clipboard-check"></i> <span class="hidden xl:inline">审阅记录</span></button>
                                 <button id="btn-state-reconcile" class="btn btn-soft btn-sm hidden" onclick="confirmStateReconciliation()" title="保留本章正文，仅调用状态模型提取人物、关系和伏笔变化"><i aria-hidden="true" class="fa-solid fa-list-check"></i> <span class="hidden xl:inline">提取本章状态</span></button>
                                 <button id="btn-chapter-edit" class="icon-btn" onclick="openChapterEditModal()" title="编辑本章正文" aria-label="编辑本章正文"><i aria-hidden="true" class="fa-solid fa-pen text-[12px]"></i></button>
@@ -2615,7 +2615,25 @@
         else { const err = await res.json().catch(() => ({})); showToast(err.detail || '分支推演失败', 'error'); }
     }
 
-    function toggleReaderRail(force, opener) {
+    function focusVisibleOverlay(overlay, getTarget) {
+        const opener = document.activeElement;
+        // Safari may delay making a newly opened overlay focusable until layout.
+        function tryFocus() {
+            if (!overlay.classList.contains('open') || overlay.hasAttribute('inert')) return true;
+            if (document.activeElement !== opener && document.activeElement !== document.body) return true;
+            const target = getTarget();
+            if (!target || getComputedStyle(target).visibility !== 'visible') return false;
+            target.focus({ preventScroll: true });
+            return document.activeElement === target;
+        }
+        if (!tryFocus()) {
+            setTimeout(() => {
+                if (!tryFocus()) setTimeout(tryFocus, 320);
+            }, 50);
+        }
+    }
+
+    function toggleReaderRail(force, opener, focusTarget) {
         const rail = document.getElementById('reader-rail');
         const backdrop = document.getElementById('rail-backdrop');
         if (!rail) return;
@@ -2628,7 +2646,8 @@
         for (const id of ['btn-rail-toggle', 'compliance-chip']) {
             document.getElementById(id)?.setAttribute('aria-expanded', String(open));
         }
-        if (open) requestAnimationFrame(() => [...rail.querySelectorAll(FOCUSABLE)].find(el => el.offsetParent !== null)?.focus({ preventScroll: true }));
+        if (open) focusVisibleOverlay(rail, () =>
+            focusTarget?.() || [...rail.querySelectorAll(FOCUSABLE)].find(el => el.offsetParent !== null));
         else {
             const returnFocus = rail._returnFocus;
             rail._returnFocus = null;
@@ -3054,7 +3073,7 @@
                 <div class="text-[10.5px] font-extrabold t3 tracking-widest uppercase mb-3 flex items-center gap-2"><i aria-hidden="true" class="fa-solid fa-shield-halved" style="color:var(--danger)"></i> 合规自查</div>
                 ${hits.map((h, i) => `
                 <div class="card-flat p-3 mb-2">
-                    <button type="button" class="compliance-hit block w-full text-left cursor-pointer mb-2" onclick="scrollToHit(${i})" aria-label="定位合规风险：${escapeHtml(h.word)}">
+                    <button type="button" tabindex="0" class="compliance-hit block w-full text-left cursor-pointer mb-2" onclick="scrollToHit(${i})" aria-label="定位合规风险：${escapeHtml(h.word)}">
                     <span class="flex justify-between items-center mb-1 gap-2">
                         <span class="font-bold text-[12px]" style="color:var(--danger)">${escapeHtml(h.word)}${h.count > 1 ? `<span class="t3 font-normal"> ×${h.count}</span>` : ''}</span>
                         <span class="chip !text-[9px] flex-shrink-0">${escapeHtml(h.category)}</span>
@@ -3072,11 +3091,10 @@
 
     function openCompliancePanel(opener) {
         if (!currentCompliance().length) return;
-        toggleReaderRail(true, opener || document.getElementById('compliance-chip'));
-        requestAnimationFrame(() => {
+        toggleReaderRail(true, opener || document.getElementById('compliance-chip'), () => {
             const box = document.getElementById('compliance-box');
             box?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            box?.querySelector('.compliance-hit')?.focus({ preventScroll: true });
+            return box?.querySelector('.compliance-hit');
         });
     }
 
@@ -3768,7 +3786,7 @@
         paletteSearchToken++;
         paletteRemoteItems = [];
         renderPalette('');
-        setTimeout(() => input.focus(), 30);
+        focusVisibleOverlay(mask, () => input);
     }
 
     function closePalette() {

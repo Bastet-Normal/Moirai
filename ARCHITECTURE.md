@@ -459,7 +459,7 @@ is cleaned after success/failure without changing the parent environment.
 3.14 on GitHub-hosted Ubuntu, macOS and Windows runners. A separate Node job uses
 `npm ci --ignore-scripts`, audits high-severity advisories, runs the browser-state
 suite, rebuilds `web/assets`, and rejects any generated diff. A dedicated browser
-job installs locked Chromium, Firefox and WebKit engines and runs the real page
+job enables native macOS Safari via the system safaridriver and runs the real page
 against the disposable offline server while rejecting non-loopback requests.
 Repository permission is read-only; every external Action is pinned to a full commit
 SHA, checkout drops credentials, and model-provider variables are forced to an empty
@@ -488,22 +488,19 @@ npm run test:web
 npm audit
 ```
 
-The real-browser smoke gate is separate from the minimal-DOM state suite. It starts
-`scripts/serve_demo.py` on an explicit loopback port, installs the locked Playwright
-engines, and exercises Chromium, Firefox and WebKit against disposable projects:
+The browser smoke gate starts the disposable demo on an explicit loopback port and
+uses the macOS system Safari through safaridriver. Playwright schedules the scenarios
+and checks assertions.
 
 ```bash
-npx --no-install playwright install webkit
+/usr/bin/safaridriver --enable
 npm run test:browser
-npx --no-install playwright install chromium firefox
-npm run test:browser:all
 ```
 
-The CI job installs all three engines with their host dependencies and keeps the
-browser cache and output directory under the runner's temporary root. The fixture
-forces an empty model key, a closed loopback endpoint and no real-project path; a
-browser run is evidence for UI/runtime behavior only, not for model quality. The
-three-engine flow also round-trips a generated ZIP through deletion and the real file
+The runner keeps the demo projects in a temporary directory. A test reads the
+actual Safari download and removes its own file after verifying it. The fixture
+forces an empty model key, a closed loopback endpoint and no real-project path.
+The Safari flow also round-trips a generated ZIP through deletion and the real file
 input, verifies restored prose, executes a chapter rollback, restores the shared
 two-chapter fixture from backup, and restores a second work from local trash. These
 destructive operations are confined to the disposable server root.
