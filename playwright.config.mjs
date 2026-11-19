@@ -12,6 +12,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 export default defineConfig({
     testDir: './tests/browser',
+    testMatch: 'novel_studio.spec.mjs',
     fullyParallel: false,
     workers: 1,
     forbidOnly: Boolean(process.env.CI),
