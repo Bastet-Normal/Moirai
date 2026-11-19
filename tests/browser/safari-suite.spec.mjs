@@ -124,9 +124,17 @@ test('searches lazy chapter prose and jumps without changing the project revisio
     const before = await (await page.request.get('/api/novel/demo_alpha')).json();
 
     await directory.getByRole('button', { name: /第2章 旅程 2/ }).focus();
-    await page.keyboard.press('Meta+K');
+    await page.evaluate(() => {
+        window.safariShortcut = null;
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Control') window.safariShortcut = [event.key, event.ctrlKey];
+        }, true);
+    });
+    await page.keyboard.press('Control+K');
+    await expect.poll(() => page.evaluate(() => window.safariShortcut)).toEqual(['k', true]);
     const search = page.getByRole('combobox', { name: '搜索作品、章节或操作', exact: true });
-    await expect.poll(() => search.focused()).toBe(true);
+    await expect.poll(() => search.isVisible()).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('palette-input');
     await search.fill('远处的灯火');
     const chapterOne = page.getByRole('option', { name: /第1章 旅程 1/ });
     await expect.poll(() => chapterOne.isVisible(), {timeout:10000}).toBe(true);

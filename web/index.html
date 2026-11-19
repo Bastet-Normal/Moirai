@@ -2615,7 +2615,15 @@
         else { const err = await res.json().catch(() => ({})); showToast(err.detail || '分支推演失败', 'error'); }
     }
 
-    function toggleReaderRail(force, opener) {
+    function focusVisibleOverlay(overlay, callback) {
+        // Safari can reject focus during the opening transition from visibility:hidden.
+        requestAnimationFrame(async () => {
+            await Promise.allSettled(overlay.getAnimations().map(animation => animation.finished));
+            if (overlay.classList.contains('open') && !overlay.hasAttribute('inert')) callback();
+        });
+    }
+
+    function toggleReaderRail(force, opener, focusTarget) {
         const rail = document.getElementById('reader-rail');
         const backdrop = document.getElementById('rail-backdrop');
         if (!rail) return;
@@ -2628,7 +2636,10 @@
         for (const id of ['btn-rail-toggle', 'compliance-chip']) {
             document.getElementById(id)?.setAttribute('aria-expanded', String(open));
         }
-        if (open) requestAnimationFrame(() => [...rail.querySelectorAll(FOCUSABLE)].find(el => el.offsetParent !== null)?.focus({ preventScroll: true }));
+        if (open) focusVisibleOverlay(rail, () => {
+            const target = focusTarget?.() || [...rail.querySelectorAll(FOCUSABLE)].find(el => el.offsetParent !== null);
+            target?.focus({ preventScroll: true });
+        });
         else {
             const returnFocus = rail._returnFocus;
             rail._returnFocus = null;
@@ -3072,11 +3083,10 @@
 
     function openCompliancePanel(opener) {
         if (!currentCompliance().length) return;
-        toggleReaderRail(true, opener || document.getElementById('compliance-chip'));
-        requestAnimationFrame(() => {
+        toggleReaderRail(true, opener || document.getElementById('compliance-chip'), () => {
             const box = document.getElementById('compliance-box');
             box?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            box?.querySelector('.compliance-hit')?.focus({ preventScroll: true });
+            return box?.querySelector('.compliance-hit');
         });
     }
 
@@ -3768,7 +3778,7 @@
         paletteSearchToken++;
         paletteRemoteItems = [];
         renderPalette('');
-        setTimeout(() => input.focus(), 30);
+        focusVisibleOverlay(mask, () => input.focus());
     }
 
     function closePalette() {

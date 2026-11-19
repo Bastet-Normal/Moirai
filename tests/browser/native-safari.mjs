@@ -132,7 +132,7 @@ export async function launchSafari() {
       },
       screenshot: async ({path}) => writeFile(path, Buffer.from(await driver.takeScreenshot(),'base64')),
       waitForTimeout: delay,
-      keyboard: { press: async key => key === 'Meta+K' ? driver.actions().keyDown(Key.COMMAND).keyDown('k').keyUp('k').keyUp(Key.COMMAND).perform() : driver.actions().sendKeys(key==='Escape'?Key.ESCAPE:key).perform() },
+      keyboard: { press: async key => key === 'Control+K' ? driver.actions().keyDown(Key.CONTROL).keyDown('k').keyUp('k').keyUp(Key.CONTROL).perform() : driver.actions().sendKeys(key==='Escape'?Key.ESCAPE:key).perform() },
       mouse: {click: (x,y) => driver.actions().move({x:Math.round(x),y:Math.round(y)}).click().perform()}
     }
   }
