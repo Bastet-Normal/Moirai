@@ -41,6 +41,10 @@ class ConsistencyAuditorAgent(BaseAgent):
             for c in characters_state
         ])
 
+        passages = "\n\n".join(
+            f"【第 {entry['chapter']} 章原文】\n{entry['text']}"
+            for entry in (chapter_context or {}).get("audit_passages", [])
+        )
         prompt = f"""【正在质检的章节】：第 {chapter_number} 章 《{chapter_title}》
 【本章设定目标冲突】：{main_conflict}
 
@@ -52,6 +56,12 @@ class ConsistencyAuditorAgent(BaseAgent):
 
 【前序事实与关系图谱（必须核对死亡、道具和伏笔状态）】：
 {format_chapter_facts(chapter_context)}
+
+【前文章节原文摘录】：
+{passages or "本次没有可引用的前文摘录。"}
+
+优先核对人物何时知道信息、事件先后、地点与移动、物品归属和伏笔是否已回收；对应 category 使用 knowledge、timeline、location、ownership、foreshadowing，其他用 other。梦境、误导和不可靠叙述优先标为待复核。
+跨章问题只有在本章和上述前文章节均有逐字引文时才写入 findings。draft_quote 和 source_quote 各引用一段短原文，不能改写或拼接；source_chapter 必须对应原文摘录的章号。推断或存在合理解释的情况用 needs_review。无可靠原文时，仅在普通逻辑问题中写明需复核。
 
 【章节待审正文内容】：
 \"\"\"{chapter_text}\"\"\"

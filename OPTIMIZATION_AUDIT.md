@@ -402,3 +402,8 @@ unsafe rollback point. Neither real project was modified.
   chapters while preserving the project revision. One unrelated Firefox compliance-panel
   click timing failure did not reproduce in 19 focused reruns; the subsequent full 27-test
   matrix passed without application console/page errors or external HTTP(S) requests.
+
+
+## Editorial pilot
+
+The release includes a disposable offline book with a seeded ownership contradiction and an import → audit → revise → export regression suite. In a real pilot, recruit 8–12 active Chinese-language serial writers across fantasy, mystery and romance, using manuscripts they have permission to process. Repeat the same edit with the writer’s existing workflow and Moirai. Record time to first useful finding, completed revision time, author-confirmed precision, false-positive handling time and whether the writer returns with another chapter within two weeks. Separate findings by knowledge, chronology, location, ownership and foreshadowing. Pilot targets for revision time and high-confidence precision are 30% faster and 85% respectively. Ask for permission before using any draft with a remote provider. Keep results local or explicitly shared by the writer.

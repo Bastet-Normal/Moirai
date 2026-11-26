@@ -13,6 +13,7 @@ from core.multimodal_generator import AudioDramaPackage, ShortDramaScript
 from core.narrative_brancher import BranchingSimulationResult
 from core.reader_simulator import ReaderSimulationReport
 from core.schemas import (
+    AuditFinding,
     AuditReport,
     ChapterBeat,
     ChapterBeatsPlan,
@@ -965,3 +966,34 @@ def test_full_and_lightweight_apis_show_matching_audit(manager, monkeypatch):
             assert client.get("/api/novel/integrity").json()["chapters"][0]["audit_status"] == "unverified"
     finally:
         get_settings.cache_clear()
+
+
+def test_saved_chapter_audit_only_publishes_grounded_earlier_quotes(manager):
+    prior = "林岚将铜钥匙锁进码头的保险箱。"
+    draft = "林岚从未把铜钥匙带离家门。"
+    future = "林岚把钥匙交给守夜人。"
+    manager.save_chapter(chapter(1, prior))
+    manager.save_chapter(chapter(2, draft))
+    manager.save_chapter(chapter(3, future))
+
+    grounded = AuditFinding(
+        issue="钥匙去向矛盾", draft_quote=draft, source_chapter=1, source_quote=prior,
+        certainty="contradiction",
+    )
+    fake_report = report(False).model_copy(update={"findings": [
+        grounded,
+        grounded.model_copy(update={"source_chapter": 3, "source_quote": future}),
+        grounded.model_copy(update={"source_quote": "不存在的引用"}),
+        grounded.model_copy(update={"draft_quote": "不存在的正文"}),
+    ]})
+    pipeline = NovelPipeline(manager.novel_id, base_dir=str(manager.root_dir))
+    pipeline.consistency_auditor = SimpleNamespace(audit_chapter=Mock(return_value=fake_report))
+    result = pipeline.audit_saved_chapter(2)
+
+    reloaded = StateManager(manager.novel_id, base_dir=str(manager.root_dir))
+    expected = grounded.model_copy(update={"source_sha256": reloaded.state.chapters[1].prose_sha256})
+    assert result.stage == "manual" and result.findings == [expected]
+    assert reloaded.state.chapters[2].full_text == draft
+    assert reloaded.state.chapters[2].final_audit == result
+    assert reloaded.state.chapters[3].full_text == future
+    assert reloaded.get_state_reconciliation_status()["required"] is False

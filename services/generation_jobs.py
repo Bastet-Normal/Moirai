@@ -6,7 +6,9 @@ import logging
 from collections.abc import Callable
 
 from config.settings import get_output_dir
+from core.chapter_drafts import ChapterRewrite, store_chapter_rewrite
 from core.error_reporting import UserInputError, referenced_failure, report_internal_error, safe_user_message
+from core.model_usage import collect_model_usage
 from core.project_ids import require_project_id
 from core.project_transactions import recover_project
 from core.schemas import CommercialTarget
@@ -30,6 +32,8 @@ def _execute_job(
 ) -> None:
     """Hold the OS-backed lease for construction, every chapter and delivery."""
     task_id = generation_status.ensure_reserved(name, task_id=task_id)
+    label = generation_status.snapshot()["current_step"]
+    usage = {}
     try:
         project_dir = get_output_dir() / require_project_id(name)
         with project_lock(project_dir, timeout=0):
@@ -39,7 +43,8 @@ def _execute_job(
             if not require_existing and (project_dir / "project_state.json").is_file():
                 raise UserInputError("已存在同名项目，拒绝把新建任务转换成续写")
             pipeline = NovelPipeline(novel_id=name)
-            action(pipeline, task_id)
+            with collect_model_usage() as usage:
+                action(pipeline, task_id)
     except Exception as exc:
         public_message = safe_user_message(exc, fallback="任务未完成")
         if public_message is None:
@@ -52,6 +57,8 @@ def _execute_job(
             public_message = referenced_failure("任务未完成；已保存的结果仍保留", error_id)
         _log(f"❌ {public_message}", "Error", task_id=task_id)
         generation_status.finish(step=public_message, error=public_message, task_id=task_id)
+    finally:
+        generation_status.record_usage(task_id, name, label, usage)
 
 
 def run_pipeline_job(
@@ -64,6 +71,7 @@ def run_pipeline_job(
     task_id: str | None = None,
     *,
     expected_revision: str | None = None,
+    include_adaptations: bool = True,
 ) -> None:
     """Create or continue a project in the reserved local worker slot."""
     def generate(pipeline: NovelPipeline, task_id: str) -> None:
@@ -72,7 +80,20 @@ def run_pipeline_job(
         start, end = NovelPipeline.plan_chapter_range(
             pipeline.state_manager.state.current_chapter_idx, chapter_count,
         )
-        _log(f"✦ 启幕：构建白金小说宇宙 [{name}]", "ConceptPlanner", task_id=task_id)
+        pipeline.include_adaptations = include_adaptations
+
+        def finish_if_stopped() -> bool:
+            if not generation_status.stop_requested(task_id):
+                return False
+            count = pipeline.state_manager.state.current_chapter_idx - start + 1
+            step = f"生成已停止，本批次已保存 {count} 章"
+            _log(step, task_id=task_id)
+            generation_status.finish(step=step, task_id=task_id)
+            return True
+
+        if finish_if_stopped():
+            return
+        _log(f"开始作品策划 [{name}]", "ConceptPlanner", task_id=task_id)
 
         if pipeline.state_manager.state.pending_initial_planning is not None:
             stage = pipeline.state_manager.state.pending_initial_planning.next_stage
@@ -91,6 +112,8 @@ def run_pipeline_job(
             )
             _log(f"✔ 架构定稿: 《{pipeline.state_manager.state.concept.title}》", "OutlineArchitect", task_id=task_id)
 
+        if finish_if_stopped():
+            return
         if pipeline.state_manager.state.pending_outline_plan is not None:
             generation_status.update(task_id=task_id, current_step="正在恢复未完成的初始总纲...")
             _log("沿用已保存的策划、世界观与人物，仅重试未完成总纲。", "OutlineArchitect", task_id=task_id)
@@ -100,6 +123,8 @@ def run_pipeline_job(
 
         with pipeline.state_manager.defer_full_exports():
             for done, chapter_number in enumerate(range(start, end + 1), start=1):
+                if generation_status.stop_requested(task_id):
+                    break
                 generation_status.update(
                     task_id=task_id,
                     current_step=f"正在创作第 {chapter_number} 章...",
@@ -119,7 +144,13 @@ def run_pipeline_job(
                     task_id=task_id,
                 )
 
-        if len(pipeline.state_manager.state.chapters) >= 3 and not pipeline.state_manager.state.delivery_package:
+        if finish_if_stopped():
+            return
+        if (
+            include_adaptations
+            and len(pipeline.state_manager.state.chapters) >= 3
+            and not pipeline.state_manager.state.delivery_package
+        ):
             generation_status.update(task_id=task_id, current_step="正在生成全套商业衍生包与 AI 电影级封面...")
             _log("宣发 Agent 正在生成短视频推文黄金脚本与 AI 封面提示词...", "CommercialDelivery", task_id=task_id)
             try:
@@ -139,7 +170,8 @@ def run_pipeline_job(
 
 
 def run_regenerate_job(
-    name: str, chapter: int, task_id: str | None = None, *, expected_revision: str | None = None,
+    name: str, chapter: int, task_id: str | None = None, *,
+    expected_revision: str | None = None, preview: bool = False,
 ) -> None:
     def regenerate(pipeline: NovelPipeline, task_id: str) -> None:
         if expected_revision is not None:
@@ -148,11 +180,56 @@ def run_regenerate_job(
         generation_status.update(task_id=task_id, current_step=f"正在重写第 {chapter} 章...")
         if chapter not in pipeline.state_manager.state.chapters:
             raise UserInputError("目标章节已不存在，重写任务取消")
+        if preview:
+            revision = pipeline.state_manager.revision
+            draft = pipeline.prepare_chapter_rewrite(chapter)
+            with project_lock(pipeline.state_manager.base_dir, scope="snapshot"):
+                store_chapter_rewrite(pipeline.state_manager.base_dir, ChapterRewrite(
+                    task_id=task_id, novel_id=pipeline.state_manager.novel_id,
+                    expected_revision=revision, draft=draft,
+                ))
+            generation_status.finish(step="重写稿待审阅", progress=100, task_id=task_id)
+            return
         result = pipeline.generate_single_chapter(chapter)
         _log(f"✔ 第 {chapter} 章 《{result.title}》 重写完成 ({result.word_count} 字)", "StateUpdater", task_id=task_id)
         generation_status.finish(step="重写完成", progress=100, task_id=task_id)
 
     _execute_job(name, task_id, regenerate)
+
+
+def run_chapter_audit_job(
+    name: str, chapter: int, task_id: str | None = None, *, expected_revision: str | None = None,
+) -> None:
+    def audit(pipeline: NovelPipeline, task_id: str) -> None:
+        if expected_revision is not None:
+            pipeline.state_manager.assert_revision(expected_revision)
+        generation_status.update(task_id=task_id, current_step=f"正在审阅第 {chapter} 章", active_agent="ConsistencyAuditor")
+        report = pipeline.audit_saved_chapter(chapter)
+        step = "自动审稿服务不可用" if report.service_error else "本章审稿完成"
+        generation_status.finish(step=step, error=step if report.service_error else "", progress=100, task_id=task_id)
+
+    _execute_job(name, task_id, audit)
+
+
+def run_related_audit_job(
+    name: str, chapters: list[int], task_id: str, *, expected_revision: str,
+) -> None:
+    def audit(pipeline: NovelPipeline, task_id: str) -> None:
+        pipeline.state_manager.assert_revision(expected_revision)
+        unavailable = []
+        for index, number in enumerate(chapters):
+            if generation_status.stop_requested(task_id):
+                generation_status.finish(step=f"复查已停止，已处理 {index} 章", task_id=task_id)
+                return
+            generation_status.update(
+                task_id=task_id, current_step=f"正在复查第 {number} 章", progress=round(index * 100 / len(chapters)),
+            )
+            if pipeline.audit_saved_chapter(number).service_error:
+                unavailable.append(number)
+        issue = "审稿服务不可用的章节：" + "、".join(map(str, unavailable)) if unavailable else ""
+        generation_status.finish(step=f"相关章节复查结束，共 {len(chapters)} 章", progress=100, error=issue, task_id=task_id)
+
+    _execute_job(name, task_id, audit)
 
 
 def run_state_reconciliation_job(

@@ -52,7 +52,9 @@ class RequestLimitsMiddleware:
         path = scope["path"].rstrip("/")
         if path == "/api/novels/import":
             limit = MAX_BACKUP_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
-        elif path == "/api/novel/patch_paragraph" or re.fullmatch(r"/api/novel/[^/]+/(chapter_text|para_rewrite_apply)", path):
+        elif path in {"/api/novel/patch_paragraph", "/api/novels/import_manuscript", "/api/novels/preview_docx"} or re.fullmatch(
+            r"/api/novel/[^/]+/(chapter_text|chapters|para_rewrite_apply)", path,
+        ):
             limit = MAX_TEXT_BODY_BYTES
         else:
             limit = MAX_JSON_BODY_BYTES

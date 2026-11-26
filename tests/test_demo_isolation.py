@@ -142,11 +142,35 @@ with demo_environment(root) as app, TestClient(app) as client:
     assert 2 in generated.short_drama_scripts
     before_rewrite = generated.revision
     regenerated = client.post('/api/novel/regenerate', json={
-        'name': 'offline_created', 'chapter': 2, 'expected_revision': before_rewrite,
+        'name': 'offline_created', 'chapter': 2, 'expected_revision': before_rewrite, 'preview': True,
     })
     assert regenerated.status_code == 200, regenerated.text
     status = client.get('/api/status').json()
-    assert status['current_step'] == '重写完成'
+    assert status['current_step'] == '重写稿待审阅'
+    staged = StateManager('offline_created')
+    assert staged.revision == before_rewrite
+    assert 2 in staged.short_drama_scripts
+    url = '/api/novel/offline_created/rewrite_candidate'
+    candidate = client.get(url).json()['candidate']
+    assert candidate['task_id'] == regenerated.json()['task_id']
+    # A new process reads the saved candidate without any worker memory.
+    import subprocess
+    saved_candidate_id = subprocess.check_output(
+        [
+            sys.executable, '-c',
+            "from pathlib import Path; from core.chapter_drafts import read_chapter_rewrite; "
+            "import sys; print(read_chapter_rewrite(Path(sys.argv[1]), 'offline_created').task_id)",
+            str(staged.base_dir),
+        ],
+        text=True,
+    ).strip()
+    assert saved_candidate_id == candidate['task_id']
+    assert candidate['title'] == '重写后的第二封信'
+    rejected = client.post(url, json={'task_id': candidate['task_id'], 'expected_revision': '0' * 64})
+    assert rejected.status_code == 409
+    accepted = client.post(url, json={'task_id': candidate['task_id'], 'expected_revision': before_rewrite})
+    assert accepted.status_code == 200, accepted.text
+    assert client.get(url).json()['candidate'] is None
     generated = StateManager('offline_created')
     assert generated.revision != before_rewrite
     assert generated.state.delivery_package is None
@@ -184,6 +208,53 @@ with demo_environment(root) as app, TestClient(app) as client:
     generated = StateManager('offline_created')
     assert generated.state.delivery_package is not None
     assert generated.state.delivery_package.cost_and_token_estimate['total_words_generated'] > 0
+
+    # Imported drafts can be edited, extended manually and continued from
+    # explicit author facts without reconstructing or rewriting old prose.
+    imported = client.post('/api/novels/import_manuscript', json={
+        'name': 'imported', 'title': '潮声稿', 'chapters': [
+            {'title': '远灯', 'text': '她站在岸边。\\n\\n街灯还没有亮。'},
+            {'title': '涨潮', 'text': '潮声从船底传来。'},
+        ],
+    })
+    assert imported.status_code == 201, imported.text
+    assert client.post('/api/novels/import_manuscript', json={
+        'name': 'imported', 'title': '其他作品', 'chapters': [{'title': '序', 'text': '同名文件。'}],
+    }).status_code == 409
+    manager = StateManager('imported')
+    assert manager.state.chapters[1].full_text == '她站在岸边。\\n\\n街灯还没有亮。'
+    assert manager.state.imported_manuscript is True
+    edited = client.patch('/api/novel/imported/chapter_text', json={
+        'chapter': 1, 'text': '她站在雾中的岸边。', 'expected_revision': manager.revision,
+    })
+    assert edited.status_code == 200, edited.text
+    manager = StateManager('imported')
+    assert not manager.get_state_reconciliation_status()['required']
+    appended = client.post('/api/novel/imported/chapters', json={
+        'title': '回信', 'text': '她把问题留在回信中。', 'expected_revision': manager.revision,
+    })
+    assert appended.status_code == 201 and appended.json()['chapter'] == 3, appended.text
+    manager = StateManager('imported')
+    assert manager.state.chapters[3].full_text == '她把问题留在回信中。'
+    facts = '信件只能在退潮后离开码头。'
+    planned = client.post('/api/novel/imported/continuation_plan', json={
+        'story_so_far': facts, 'direction': '找到失踪的船主', 'next_title': '访客',
+        'next_scene': '一个认识船主的人抵达码头', 'chapters_to_plan': 4, 'expected_revision': manager.revision,
+    })
+    assert planned.status_code == 200, planned.text
+    assert planned.json()['chapter'] == 4 and planned.json()['end'] == 7
+    assert facts in StateManager('imported').build_chapter_context(4)['special_rules']
+    continued_import = client.post('/api/novel/continue', json={
+        'name': 'imported', 'count': 1, 'expected_revision': planned.json()['revision'],
+        'include_adaptations': False,
+    })
+    assert continued_import.status_code == 200, continued_import.text
+    assert client.get('/api/status').json()['current_step'] == '全部生成完成'
+    imported_state = StateManager('imported')
+    assert imported_state.state.chapters[1].full_text == '她站在雾中的岸边。'
+    assert imported_state.state.chapters[4].title == '访客'
+    assert imported_state.state.delivery_package is None
+    assert not (imported_state.multimodal_dir / 'short_drama_chap_004.json').exists()
 
     try:
         get_llm_client().generate_text('test', 'test')

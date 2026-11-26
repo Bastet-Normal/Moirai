@@ -182,16 +182,51 @@ def _offline_write_beat(_agent, beat, chapter_title, chapter_number, **_kwargs):
     ))
 
 
-def _offline_audit_chapter(_agent, chapter_number, chapter_title, **_kwargs):
-    from core.schemas import AuditReport
+_SAMPLE_BEFORE = "沈星将信标钥匙留在只有南薇能打开的玻璃匣里。"
+_SAMPLE_AFTER = "沈星伸手一摸，信标钥匙一直揣在她自己的大衣口袋里。"
 
+
+def _offline_audit_chapter(_agent, chapter_number, chapter_title, **kwargs):
+    from core.schemas import AuditFinding, AuditReport
+
+    target = kwargs.get("chapter_text", "")
+    sources = (kwargs.get("chapter_context") or {}).get("audit_passages", [])
+    findings = []
+    if _SAMPLE_AFTER in target:
+        for source in sources:
+            if _SAMPLE_BEFORE in source["text"]:
+                findings.append(AuditFinding(
+                    issue="信标钥匙在两章里被描述为留在不同位置。请核对是否有取回钥匙的情节。",
+                    source_chapter=source["chapter"], source_quote=_SAMPLE_BEFORE,
+                    draft_quote=_SAMPLE_AFTER, certainty="contradiction", category="ownership",
+                ))
+                break
     return AuditReport(
-        passed=True,
-        consistency_score=9.4,
+        passed=not findings,
+        consistency_score=5.1 if findings else 9.4,
         pacing_score=9.1,
         cliffhanger_detected=True,
-        critique=f"离线确定性审计通过：第 {chapter_number} 章《{chapter_title}》与总纲一致。",
+        findings=findings,
+        critique=f"离线样书复现了第 {chapter_number} 章《{chapter_title}》的审阅流程。",
     )
+
+
+def _offline_structured(_client, messages, response_model, **kwargs):
+    from core.manuscript_facts import ManuscriptFacts
+    from core.schemas import ManuscriptFact
+
+    if response_model is not ManuscriptFacts:
+        return _offline_chat()
+    facts = []
+    for section in messages[0]["content"].split("【第 ")[1:]:
+        heading, _, source = section.partition(" 章摘录】")
+        quote = source.strip().split("\n", 1)[0][:100]
+        if heading.isdigit() and len(quote) >= 4:
+            facts.append(ManuscriptFact(
+                kind="timeline", subject="演示摘录", fact=quote,
+                source_chapter=int(heading), quote=quote,
+            ))
+    return ManuscriptFacts(facts=facts)
 
 
 def _offline_polish_chapter(_agent, raw_chapter_text, **_kwargs):
@@ -317,7 +352,7 @@ def demo_environment(directory: Path):
         patch.dict(os.environ, environment),
         patch.dict(Settings.model_config, env_file=str(directory / ".env")),
         patch.object(LLMClient, "_new_client", return_value=OfflineSDK()),
-        patch.object(LLMClient, "_chat", _offline_chat),
+        patch.multiple(LLMClient, _chat=_offline_chat, generate_structured=_offline_structured),
     ):
         get_settings.cache_clear()
         import web_ui
@@ -335,21 +370,10 @@ def demo_environment(directory: Path):
         from core.schemas import ChapterContent, CharacterCard, CharacterState, NovelConcept
         from core.state_manager import StateManager
 
-        rewrite_adaptation_attempts: dict[tuple[str, int], int] = {}
-
-        def offline_short_drama_once(generator, novel_concept, chapter):
-            key = (novel_concept.title, chapter.chapter_number)
-            if chapter.title.startswith(("重写验证", "重写后的")):
-                attempt = rewrite_adaptation_attempts.get(key, 0) + 1
-                rewrite_adaptation_attempts[key] = attempt
-                if attempt % 2:
-                    raise RuntimeError("离线验收：重写后的短剧转化故意失败")
-            return _offline_short_drama(generator, novel_concept, chapter)
-
         # Assets/HTML are already bound to the source tree. Only the config write
         # destination is redirected here; settings reads use the same temp file.
         with (
-            patch.object(web_ui, "BASE_DIR", directory),
+            patch.multiple(web_ui, BASE_DIR=directory, OFFLINE_DEMO=True),
             patch.object(ConceptPlannerAgent, "plan_novel", _offline_plan_novel),
             patch.object(OutlineArchitectAgent, "generate_global_outline", _offline_global_outline),
             patch.object(BeatDirectorAgent, "plan_chapter_beats", _offline_chapter_beats),
@@ -358,7 +382,7 @@ def demo_environment(directory: Path):
             patch.object(StylistPolisherAgent, "polish_chapter", _offline_polish_chapter),
             patch.object(StateUpdaterAgent, "extract_state_delta", _offline_state_delta),
             patch.object(MultimodalGenerator, "generate_audio_drama_package", _offline_audio_package),
-            patch.object(MultimodalGenerator, "generate_short_drama_script", offline_short_drama_once),
+            patch.object(MultimodalGenerator, "generate_short_drama_script", _offline_short_drama),
             patch.object(ReaderSimulator, "simulate_chapter_readers", _offline_reader_simulation),
             patch.object(NarrativeBrancher, "simulate_branches", _offline_branch_simulation),
             patch.object(CommercialDeliveryAgent, "generate_delivery_package", _offline_delivery_package),
@@ -384,6 +408,14 @@ def demo_environment(directory: Path):
                             "这是一段离线验收用的示例正文，可以编辑、回滚或删除。"
                             for i in range(18)
                         )
+                        if novel_id == "demo_beta":
+                            body = (
+                                "天文台停电前，沈星请南薇检查最后一份星图。\n\n"
+                                + _SAMPLE_BEFORE + "\n\n匣底的编号与消失的旧航线一致。"
+                                if number == 1 else
+                                "夜潮升起，两个人在码头分开。\n\n"
+                                + _SAMPLE_AFTER + "\n\n信标就在雾中。"
+                            )
                         manager.save_chapter(ChapterContent(
                             chapter_number=number, volume_number=1, title=f"旅程 {number}",
                             full_text=body, word_count=len(body), beats_raw_text=[], cliffhanger_ending="",

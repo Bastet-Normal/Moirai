@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#f4f5fa" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#0d1120" media="(prefers-color-scheme: dark)">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235457e0'/%3E%3Cpath d='M20 46V19l12 17 12-17v27' stroke='%23fff' stroke-width='5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+    <meta name="theme-color" content="#f4f2ec" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#181b18" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232c5c48'/%3E%3Cpath d='M20 46V19l12 17 12-17v27' stroke='%23fff' stroke-width='5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
     <title>Moirai</title>
     <link href="/assets/tailwind.min.css" rel="stylesheet">
     <script src="/assets/cytoscape.min.js"></script>
@@ -13,52 +13,53 @@
     <style>
         /* ============ 设计令牌 ============ */
         :root {
-            --bg: #f4f5fa;
-            --bg-soft: #eceef6;
-            --card: #ffffff;
-            --card-2: #f8f9fd;
-            --border: #e4e7f0;
-            --border-strong: #d3d8e6;
-            --ink: #101426;
-            --ink-2: #4b5268;
-            --ink-3: #626a7f;
-            --accent: #5457e0;
-            --accent-2: #8b5cf6;
-            --primary-start: #4f46e5;
-            --primary-end: #6d28d9;
-            --accent-soft: #eeeefc;
-            --accent-ink: #4548c9;
-            --ok: #16a34a;
+            --bg: #f4f2ec;
+            --bg-soft: #ebe7dc;
+            --card: #fffdf8;
+            --card-2: #f8f5ee;
+            --border: #e5dfd2;
+            --border-strong: #cfc6b5;
+            --ink: #25271e;
+            --ink-2: #55574b;
+            --ink-3: #656557;
+            --accent: #2f674f;
+            --accent-2: #735841;
+            --primary-start: #2c5c48;
+            --primary-end: #244e3e;
+            --accent-soft: #e8eee5;
+            --accent-ink: #2a5a43;
+            --ok: #236446;
             --ok-soft: #e8f7ee;
-            --warn: #d97706;
+            --warn: #885514;
             --warn-soft: #fdf3e3;
-            --danger: #dc2626;
+            --danger: #a43831;
             --danger-soft: #fdecec;
             --info-soft: #e8f1fd;
-            --shadow-sm: 0 1px 2px rgba(16, 20, 38, .05), 0 2px 8px -2px rgba(16, 20, 38, .06);
-            --shadow-md: 0 4px 16px -4px rgba(16, 20, 38, .1), 0 2px 6px -2px rgba(16, 20, 38, .06);
-            --shadow-lg: 0 24px 60px -16px rgba(16, 20, 38, .22);
-            --ring: 0 0 0 3px rgba(84, 87, 224, .18);
+            --shadow-sm: 0 1px 2px rgba(37, 39, 30, .05), 0 2px 8px -2px rgba(37, 39, 30, .06);
+            --shadow-md: 0 4px 16px -4px rgba(37, 39, 30, .1), 0 2px 6px -2px rgba(37, 39, 30, .06);
+            --shadow-lg: 0 24px 60px -16px rgba(37, 39, 30, .22);
+            --ring: 0 0 0 3px rgba(43, 92, 72, .18);
             --reader-fs: 18px;
-            --topbar-h: 56px;
+            --topbar-h: 60px;
             --ease-spring: cubic-bezier(.32, .72, 0, 1);
             --ease-out: cubic-bezier(.16, 1, .3, 1);
             --serif: "Songti SC", STSong, SimSun, "Noto Serif CJK SC", Georgia, serif;
+            --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", sans-serif;
         }
         html.dark {
-            --bg: #0d1120;
-            --bg-soft: #111730;
-            --card: #161d33;
-            --card-2: #1b2340;
-            --border: #273052;
-            --border-strong: #35406b;
-            --ink: #e9ecf8;
-            --ink-2: #a7aec9;
-            --ink-3: #8d96b5;
-            --accent: #7c7ff2;
-            --accent-2: #a78bfa;
-            --accent-soft: #232750;
-            --accent-ink: #a5a8ff;
+            --bg: #181b18;
+            --bg-soft: #212620;
+            --card: #222721;
+            --card-2: #293028;
+            --border: #363d33;
+            --border-strong: #4e574b;
+            --ink: #f1eee4;
+            --ink-2: #c2c6b9;
+            --ink-3: #aab3a3;
+            --accent: #9cc6ab;
+            --accent-2: #d2ac82;
+            --accent-soft: #2d3c31;
+            --accent-ink: #b0d3ba;
             --ok: #34d399;
             --ok-soft: #11321f;
             --warn: #fbbf24;
@@ -69,7 +70,7 @@
             --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
             --shadow-md: 0 6px 20px -6px rgba(0, 0, 0, .45);
             --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, .6);
-            --ring: 0 0 0 3px rgba(124, 127, 242, .3);
+            --ring: 0 0 0 3px rgba(156, 198, 171, .3);
         }
         * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
         ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -102,7 +103,7 @@
         body {
             background: var(--bg);
             color: var(--ink);
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", sans-serif;
+            font-family: var(--sans);
             transition: background .25s ease, color .25s ease;
         }
         .t1 { color: var(--ink); }
@@ -122,8 +123,7 @@
         .card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            box-shadow: var(--shadow-sm);
+            border-radius: 12px;
         }
         .card-flat { background: var(--card-2); border: 1px solid var(--border); border-radius: 14px; }
         .hover-lift { transition: transform .2s cubic-bezier(.16,1,.3,1), box-shadow .2s, border-color .2s; }
@@ -140,8 +140,8 @@
         .btn:disabled { opacity: .55; cursor: not-allowed; }
         .btn:active:not(:disabled) { transform: scale(.96); }
         .btn { transition: transform .12s var(--ease-spring), filter .16s ease, background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease; }
-        .btn-primary { background: linear-gradient(120deg, var(--primary-start), var(--primary-end)); color: #fff; box-shadow: 0 4px 14px -4px rgba(84, 87, 224, .5); }
-        .btn-primary:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 18px -4px rgba(84, 87, 224, .55); }
+        .btn-primary { background: linear-gradient(120deg, var(--primary-start), var(--primary-end)); color: #fff; box-shadow: 0 4px 14px -4px rgba(43, 92, 72, .5); }
+        .btn-primary:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 18px -4px rgba(43, 92, 72, .55); }
         .btn-soft { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
         .btn-soft:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, var(--card)); }
         .btn-outline { background: var(--card); color: var(--ink-2); border-color: var(--border-strong); }
@@ -192,7 +192,7 @@
         .label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; letter-spacing: .02em; }
 
         .tab-btn {
-            position: relative; padding: 13px 2px; margin-right: 22px;
+            position: relative; padding: 13px 4px; margin-right: 16px;
             font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap;
             border: none; background: none; cursor: pointer; transition: color .15s;
             display: inline-flex; align-items: center; gap: 7px;
@@ -227,7 +227,7 @@
         .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 4px 22px 20px; }
 
         /* ============ Toast ============ */
-        #toast-box { position: fixed; top: 68px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 10px; max-width: 380px; }
+        #toast-box { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: grid; gap: 8px; max-width: 380px; pointer-events: none; }
         .toast {
             display: flex; align-items: flex-start; gap: 10px;
             background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent);
@@ -256,16 +256,17 @@
         .brand-mark {
             width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
             background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-size: 15px;
-            box-shadow: 0 4px 12px -2px rgba(84, 87, 224, .45);
+            box-shadow: 0 4px 12px -2px rgba(43, 92, 72, .45);
         }
         #pipeline-bar { overflow: hidden; max-height: 0; opacity: 0; visibility: hidden; transition: max-height .3s ease, opacity .25s ease; }
-        #pipeline-bar.show { max-height: 64px; opacity: 1; visibility: visible; }
+        #pipeline-bar.show { max-height: 100px; opacity: 1; visibility: visible; }
         .pipe-progress-track { height: 4px; background: var(--bg-soft); border-radius: 4px; overflow: hidden; }
         .pipe-progress-fill {
-            height: 100%; border-radius: 4px; width: 0%;
+            height: 100%; border-radius: 4px; width: 100%;
+            transform: scaleX(0); transform-origin: left center;
             background: linear-gradient(90deg, var(--accent), var(--accent-2));
             background-size: 200% 100%; animation: grad-slide 2.2s linear infinite;
-            transition: width .6s cubic-bezier(.16,1,.3,1);
+            transition: transform .45s cubic-bezier(.16,1,.3,1);
         }
         @keyframes grad-slide { from { background-position: 0% 0; } to { background-position: 200% 0; } }
         .agent-node {
@@ -279,7 +280,7 @@
         @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
 
         /* ============ 侧栏书架 ============ */
-        .sidebar { width: 288px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .sidebar { width: 252px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
         .novel-card {
             padding: 12px 14px 12px 16px; border-radius: 12px; cursor: pointer; position: relative;
             background: transparent; border: none;
@@ -303,25 +304,10 @@
             box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 18%, transparent);
         }
 
-        /* ============ 欢迎页 ============ */
-        .hero-badge {
-            display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 999px;
-            background: var(--accent-soft); color: var(--accent-ink); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-            font-size: 12px; font-weight: 700; font-family: var(--serif); min-height: 30px;
-        }
-        .hero-caret { animation: caret-blink 1s steps(1) infinite; font-weight: 400; }
-        @keyframes caret-blink { 50% { opacity: 0; } }
-        .feature-card { padding: 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); text-align: left; transition: all .18s; }
-        .feature-card:hover { border-color: color-mix(in srgb, var(--accent) 35%, transparent); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
-        .feature-icon {
-            width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
-            background: var(--accent-soft); color: var(--accent-ink); font-size: 14px; margin-bottom: 10px;
-        }
-
         /* ============ 阅读器 ============ */
         .reader-body {
             font-family: var(--serif);
-            font-size: calc(var(--reader-fs) + 1px); line-height: 2.2; letter-spacing: .02em; color: var(--ink);
+            font-size: calc(var(--reader-fs) + 1px); line-height: 2.08; letter-spacing: .015em; color: var(--ink);
         }
         .reader-para { position: relative; border-radius: 8px; padding: 2px 8px; margin: 0 -8px; transition: background .15s; }
         .reader-para:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
@@ -346,7 +332,9 @@
         }
         .chap-item:hover { background: var(--bg-soft); color: var(--ink); }
         .chap-item:active { transform: scale(.97); }
-        .chap-item { transition: all .14s var(--ease-spring); }
+        .chap-item {
+            transition: color .14s, background .14s, border-color .14s, transform .14s var(--ease-spring);
+        }
         button.chap-item { width: 100%; text-align: left; }
         .chap-item.active { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
         .vol-head { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; color: var(--ink-3); padding: 10px 12px 4px; text-transform: uppercase; }
@@ -408,8 +396,8 @@
             #reader-scroll { min-width: 0 !important; }
         }
         @media (max-width: 1024px) {
-            .sidebar { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 40; transform: translateX(-100%); visibility: hidden; pointer-events: none; transition: transform .25s ease, visibility 0s linear .25s; box-shadow: var(--shadow-lg); }
-            .sidebar.open { transform: none; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+            .sidebar { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 40; transform: translateX(-100%); visibility: hidden; pointer-events: none; box-shadow: var(--shadow-lg); }
+            .sidebar.open { transform: none; visibility: visible; pointer-events: auto; transition: transform .25s ease; }
             #btn-side-toggle { display: inline-flex !important; }
         }
         #btn-side-toggle { display: none; }
@@ -502,7 +490,7 @@
             #usage-chip { padding-inline: 8px !important; }
             #workspace-panels { padding: 8px !important; }
             #tab-chapters { flex-direction: column; gap: 8px; }
-            .chapter-directory { width: 100% !important; height: 112px; padding: 8px !important; }
+            .chapter-directory { width: 100% !important; height: 84px; padding: 8px !important; }
             #chapters-nav-list {
                 display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden;
                 padding: 0 0 2px !important;
@@ -516,6 +504,173 @@
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
+
+        /* Studio layout */
+        :root { color-scheme: light; }
+        html.dark { color-scheme: dark; }
+        .topbar { background: var(--card); flex-shrink: 0; }
+        .topbar .brand-mark { background: var(--primary-start); box-shadow: none; }
+        .studio-brand { flex-shrink: 0; }
+        .topbar-brand-text { color: var(--ink); font-weight: 700; letter-spacing: .035em; }
+        .sidebar-head { min-height: 58px; padding-inline: 16px; border-bottom: 1px solid var(--border); }
+        .sidebar-head h2 { font-size: 13px; font-weight: 700; }
+        .library-actions { padding: 12px; }
+        .library-actions .btn { min-height: 36px; }
+        .novel-card { padding: 10px 12px; }
+        .novel-card.active::before { left: 0; height: 50%; background: var(--accent); }
+        .novel-mono { border: 1px solid var(--border); box-shadow: none; }
+        .studio-home {
+            max-width: 1040px; margin: 0 auto; padding: clamp(36px, 8vw, 108px) clamp(20px, 6vw, 78px);
+        }
+        .welcome-main { max-width: 650px; padding-block: clamp(24px, 4vw, 52px); }
+        .welcome-main h1, .workspace-heading h1, .chapter-heading h2 {
+            font-family: var(--serif); color: var(--ink); font-weight: 700;
+        }
+        .welcome-main h1 { font-size: clamp(34px, 6vw, 68px); line-height: 1.17; letter-spacing: -.055em; }
+        .welcome-main p { color: var(--ink-2); margin-top: 18px; font-size: clamp(14px, 1.8vw, 17px); line-height: 1.8; }
+        .welcome-actions { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 10px; }
+        .welcome-actions .btn { min-height: 44px; }
+        .recent-work { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--border-strong); }
+        .recent-work h2 { font-size: 13px; color: var(--ink-2); margin-bottom: 12px; font-weight: 600; }
+        .recent-work button {
+            display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px;
+            align-items: center; padding: 14px 16px; width: 100%; max-width: 460px; text-align: left;
+            background: var(--card); border: 1px solid var(--border-strong); border-radius: 10px; color: var(--ink);
+        }
+        .recent-work button:hover { border-color: var(--accent); }
+        .recent-work button strong { display: block; overflow-wrap: anywhere; }
+        .recent-work small { color: var(--ink-2); }
+        .workspace-heading {
+            padding: 16px clamp(14px, 3vw, 36px) 12px; display: flex; gap: 12px 20px; flex-wrap: wrap;
+            align-items: center; justify-content: space-between; background: var(--card);
+        }
+        .workspace-heading h1 { font-size: clamp(20px, 2.35vw, 31px); min-width: 0; }
+        .workspace-heading #novel-stats { border-color: transparent; background: transparent; padding-inline: 0; }
+        .action-menu { position: relative; }
+        .action-menu summary { list-style: none; }
+        .action-menu summary::-webkit-details-marker { display: none; }
+        .project-menu {
+            position: absolute; z-index: 48; top: calc(100% + 7px); right: 0;
+            width: min(230px, calc(100vw - 32px)); box-shadow: var(--shadow-md);
+            background: var(--card); border: 1px solid var(--border-strong); border-radius: 10px; padding: 5px;
+        }
+        .project-menu > button { display: flex; width: 100%; min-height: 36px; justify-content: flex-start; }
+        .chapter-tool-menu { right: auto; left: 0; width: 184px; }
+        .font-settings { margin-top: 5px; padding: 5px 6px 0 10px; border-top: 1px solid var(--border); }
+        .font-settings .icon-btn { min-height: 32px; }
+        #workspace-tabs { padding-inline: clamp(14px, 3vw, 36px); flex-shrink: 0; }
+        #workspace-panels { padding: clamp(10px, 1.6vw, 24px); min-height: 0; }
+        #tab-chapters { gap: clamp(10px, 1.6vw, 22px); }
+        .chapter-directory { background: transparent; border: 0; padding-inline: 4px; }
+        .chapter-directory h2 { color: var(--ink-2); font-size: 12px; font-weight: 700; }
+        #reader-scroll { min-width: 0; overflow-wrap: anywhere; padding: clamp(20px, 3vw, 48px); }
+        #reader-scroll > :not(#reader-progress) { width: min(100%, 45rem); align-self: center; }
+        .chapter-heading { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+        .chapter-heading h2 { font-size: clamp(24px, 3.2vw, 40px); line-height: 1.23; letter-spacing: -.035em; }
+        .chapter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
+        .chapter-actions button { min-height: 36px; }
+        .chapter-actions .toolbar-spacer { flex: 1; }
+        .chapter-actions .btn-ghost { border-color: var(--border); }
+        #reader-rail { width: min(336px, calc(100vw - 20px)); }
+        .modal-mask { padding: 16px; }
+        .modal { max-height: min(860px, calc(100dvh - 32px)); }
+        .log-drawer { background: var(--bg-soft); color: var(--ink-2); }
+        @media (max-width: 640px) {
+            .workspace-heading { gap: 10px; }
+            .workspace-heading h1 { max-width: calc(100vw - 32px); }
+            .workspace-heading #novel-logline { display: none; }
+            .chapter-directory { padding-top: 2px !important; }
+            .chapter-heading { padding-bottom: 12px; margin-bottom: 12px; }
+            .chapter-actions .toolbar-spacer { display: none; }
+            .chapter-tool-menu { left: auto; right: 0; }
+            .studio-home { padding-top: 40px; }
+            .modal-body { padding-inline: 16px; }
+            .modal-head, .modal-foot { padding-inline: 16px; }
+            .input, .select, .textarea { font-size: 16px; }
+            #toast-box { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); right: 10px; left: 10px; max-width: none; }
+        }
+        @media (max-width: 360px) {
+            .chapter-actions .btn { padding-inline: 8px; }
+            .chapter-actions summary i { display: none; }
+            .chapter-actions { gap: 5px; }
+        }
+        @media (pointer: coarse) {
+            .chapter-actions button, .library-actions .btn, .topbar .icon-btn { min-height: 40px; }
+        }
+        .manuscript-modal { max-width: 780px; }
+        .manuscript-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+        .manuscript-prose { font-family: var(--serif); line-height: 1.8; }
+        .manuscript-preview-top { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+        .manuscript-preview-top .label { margin: 0; }
+        .manuscript-preview-top .select { width: auto; max-width: 100%; min-width: min(200px, 100%); }
+        .manuscript-chapter { padding-top: 12px; border-top: 1px solid var(--border); }
+        @media (max-width: 520px) { .manuscript-fields { grid-template-columns: 1fr; } }
+        .chapter-editor, .rewrite-review { max-width: 1080px; }
+        .editor-grid, .rewrite-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .38fr); gap: 18px; }
+        .editor-prose, .rewrite-prose {
+            font-family: var(--serif); font-size: clamp(16px, 1.7vw, 18px); line-height: 1.9;
+        }
+        .editor-prose { min-height: min(46dvh, 380px); resize: vertical; background: var(--card); }
+        .editor-notes { display: grid; gap: 15px; align-content: start; padding: 14px; background: var(--card-2); border-radius: 8px; }
+        .editor-notes p { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .editor-actions { align-items: center; flex-wrap: wrap; }
+        .editor-actions .editor-count { margin-right: auto; }
+        .rewrite-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .rewrite-pane { min-width: 0; }
+        .rewrite-prose {
+            border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 7px;
+            white-space: pre-wrap; overflow-wrap: anywhere; max-height: min(52dvh, 520px); overflow: auto;
+        }
+        .rewrite-prose mark { color: inherit; background: var(--accent-soft); }
+        .rewrite-pane:first-child mark { background: var(--warn-soft); }
+        @media (max-width: 700px) {
+            .editor-grid, .rewrite-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+            .editor-prose { min-height: 36dvh; }
+            .rewrite-prose { max-height: 28dvh; }
+        }
+        /* Editorial workbench: reading surface first, tools in the margin. */
+        .studio-kicker { color: var(--accent-ink); font-size: 12px; font-weight: 650; letter-spacing: .16em; }
+        .welcome-main .studio-kicker { margin: 0 0 14px; color: var(--accent-ink); font-size: 12px; }
+        .editorial-title { color: var(--ink); font-family: var(--serif); font-size: clamp(23px, 3vw, 34px); line-height: 1.2; font-weight: 700; }
+        .chapter-directory { border-inline-end: 1px solid var(--border); border-radius: 0; padding-inline-end: 12px; }
+        .chapter-editor .modal-head, .audit-workbench .modal-head { align-items: flex-start; }
+        .editor-notes { border-radius: 0; border-inline-start: 1px solid var(--border); background: none; padding: 8px 0 8px 18px; }
+        .editor-notes .btn { justify-self: start; }
+        .editor-conflict { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; padding: 12px clamp(12px, 2vw, 22px); background: var(--warn-soft); }
+        .chapter-editor:has(#ce-conflict:not(.hidden)) .editor-prose { min-height: 150px; height: clamp(150px, 26dvh, 240px); }
+        body:has(.modal-mask.open) #toast-box { top: 10px; bottom: auto; }
+        .editor-conflict h3 { color: var(--ink); font-weight: 700; }
+        .editor-conflict p { color: var(--ink-2); margin-block: 4px 10px; font-size: 13px; }
+        .editor-compare pre { background: var(--card); max-height: min(18dvh, 180px); font-size: 14px; }
+        .editor-conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .audit-workbench { max-width: 1060px; }
+        .audit-workbench-grid { display: grid; grid-template-columns: minmax(0, 1.24fr) minmax(260px, .76fr); gap: clamp(14px, 2.5vw, 30px); align-items: start; }
+        .audit-main, .audit-inspector { display: grid; gap: 12px; min-width: 0; }
+        .audit-inspector { position: sticky; top: 0; }
+        .editorial-disclosure { border-block-start: 1px solid var(--border); padding-block: 9px; }
+        .editorial-disclosure summary { color: var(--ink-2); font-weight: 650; cursor: pointer; }
+        .audit-footer { flex-wrap: wrap; }
+        .audit-source-panel { padding: 12px; background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; }
+        .audit-source-panel pre { font-size: 15px; max-height: 26dvh; background: var(--card); }
+        .audit-coverage { color: var(--ink-2); font-size: 13px; line-height: 1.65; }
+        .audit-quote-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+        .audit-quote-pair blockquote { padding: 9px 10px; font-family: var(--serif); color: var(--ink); background: var(--card); border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; }
+        .audit-quote-pair b { display: block; margin-bottom: 3px; color: var(--ink-2); font-family: var(--sans); font-size: 11px; }
+        .audit-findings { display: grid; gap: 8px; }
+        .audit-finding { padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+        .audit-finding blockquote { overflow-wrap: anywhere; }
+        @media (max-width: 760px) {
+            .audit-workbench-grid { grid-template-columns: minmax(0, 1fr); }
+            .audit-inspector { position: static; }
+        }
+        @media (max-width: 700px) {
+            .chapter-directory { border-inline-end: 0; }
+            .editor-notes { border-inline-start: 0; border-block-start: 1px solid var(--border); padding: 12px 0 0; }
+        }
+        @media (max-width: 460px) {
+            .audit-quote-pair { grid-template-columns: minmax(0, 1fr); }
+            .audit-footer > .btn { min-height: 38px; }
         }
     </style>
 </head>
@@ -533,10 +688,10 @@
 <header class="topbar">
     <div class="topbar-leading flex items-center gap-3">
         <button id="btn-side-toggle" class="icon-btn" onclick="toggleSidebar()" aria-label="书架" aria-controls="sidebar" aria-expanded="false"><i aria-hidden="true" class="fa-solid fa-bars"></i></button>
-        <div class="brand-mark"><i aria-hidden="true" class="fa-solid fa-feather-pointed"></i></div>
-        <div>
-            <span class="topbar-brand-text grad-text font-extrabold tracking-tight" style="font-family:var(--serif);font-size:17px">Moirai</span>
-        </div>
+        <button type="button" class="studio-brand flex items-center gap-3" aria-label="返回创作台" onclick="openStudioHome()">
+            <span class="brand-mark"><i aria-hidden="true" class="fa-solid fa-feather-pointed"></i></span>
+            <span class="topbar-brand-text" style="font-family:var(--serif);font-size:17px">Moirai</span>
+        </button>
     </div>
     <div class="topbar-actions flex items-center gap-2.5">
         <button class="btn btn-ghost btn-sm !px-2.5" id="usage-chip" onclick="showUsage()" title="本次会话 token 用量" aria-label="查看 token 用量" style="font-variant-numeric:tabular-nums"><i aria-hidden="true" class="fa-solid fa-bolt text-[10px] text-warn"></i><span id="usage-text">--</span></button>
@@ -560,6 +715,7 @@
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
                 <span id="pipeline-pct" class="text-[11px] font-extrabold text-accent mono">0%</span>
+                <button type="button" id="pipeline-stop" class="btn btn-outline btn-sm hidden" onclick="withLoading(this, requestGenerationStop)" title="完成当前策划或章节后停止">停止</button>
                 <button class="btn btn-ghost btn-sm !px-2" onclick="toggleLogPanel()" title="实时日志" aria-label="实时日志"><i aria-hidden="true" class="fa-solid fa-terminal text-[10px]"></i></button>
             </div>
         </div>
@@ -591,7 +747,7 @@
 <div class="flex-1 flex overflow-hidden">
     <!-- 书架侧栏 -->
     <aside class="sidebar" id="sidebar" aria-labelledby="library-title">
-        <div class="p-4 pb-3 border-b flex items-center justify-between" style="border-color:var(--border)">
+        <div class="sidebar-head flex items-center justify-between">
             <h2 id="library-title" class="text-[11px] font-extrabold t2 tracking-widest uppercase flex items-center gap-2">
                 <i aria-hidden="true" class="fa-solid fa-bookmark text-accent"></i> 作品库
             </h2>
@@ -602,7 +758,8 @@
             </div>
         </div>
         <input type="file" id="import-file" accept=".zip" aria-label="项目 ZIP 备份" class="hidden" onchange="importBackup(this)">
-        <div class="p-3 pb-2">
+        <div class="library-actions">
+            <button class="btn btn-outline w-full mb-3" onclick="openManuscriptImport()"><i aria-hidden="true" class="fa-solid fa-file-import"></i> 导入存稿</button>
             <div class="relative">
                 <i aria-hidden="true" class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[11px] t3"></i>
                 <input id="novels-search" class="input !py-2 !pl-8 !text-[12px]" aria-label="搜索书名、题材或项目名" placeholder="搜索书名 / 题材 / 项目名..." oninput="renderNovelList()">
@@ -621,35 +778,30 @@
         </div>
     </aside>
 
-    <!-- 主工作台 -->
+    <!-- 创作工作台 -->
     <main id="main-content" tabindex="-1" class="flex-1 flex flex-col overflow-hidden" style="background:var(--bg)">
-        <!-- 欢迎页 -->
         <div id="welcome-view" class="flex-1 overflow-y-auto">
-            <div class="max-w-3xl mx-auto px-8 py-20 text-center">
-                <div class="hero-badge mb-7"><i aria-hidden="true" class="fa-solid fa-feather-pointed"></i> <span id="hero-typing"></span><span class="hero-caret">|</span></div>
-                <h1 class="text-[42px] leading-[1.15] font-black tracking-tight t1 mb-5" style="font-family:var(--serif)">
-                    让 AI 像白金作家团队<br>为你<span class="grad-text">长篇连载</span>
-                </h1>
-                <p class="t2 text-[14px] mb-11">从灵感到可发布的连载正文，一条流水线完成。</p>
-                <div class="flex justify-center gap-3 mb-14">
-                    <button class="btn btn-primary !px-7 !py-3.5 !text-[13.5px]" onclick="openModal('modal-create')"><i aria-hidden="true" class="fa-solid fa-wand-magic-sparkles"></i> 新建作品</button>
-                    <button class="btn btn-outline !px-6 !py-3.5 !text-[13.5px]" onclick="openConfigModal()">配置模型与 API</button>
+            <div class="studio-home">
+                <div class="welcome-main">
+                    <p class="studio-kicker">MOIRAI · 本地创作台</p>
+                    <h1>你的长篇小说<br>创作工作台</h1>
+                    <p>从存稿或新构思开始。正文保存在本机；需要模型辅助时，可先查看发送范围。</p>
+                    <div class="welcome-actions">
+                        <button class="btn btn-primary" onclick="openManuscriptImport()"><i aria-hidden="true" class="fa-solid fa-file-import"></i> 导入存稿</button>
+                        <button class="btn btn-outline" onclick="openModal('modal-create')"><i aria-hidden="true" class="fa-solid fa-plus"></i> 新建作品</button>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-left">
-                    <div class="feature-card"><div class="feature-icon"><i aria-hidden="true" class="fa-solid fa-diagram-project"></i></div><div class="font-extrabold text-[12.5px] t1 mb-1">实体关系图谱</div></div>
-                    <div class="feature-card"><div class="feature-icon"><i aria-hidden="true" class="fa-solid fa-brain"></i></div><div class="font-extrabold text-[12.5px] t1 mb-1">百万字长程记忆</div></div>
-                    <div class="feature-card"><div class="feature-icon"><i aria-hidden="true" class="fa-solid fa-wave-square"></i></div><div class="font-extrabold text-[12.5px] t1 mb-1">情绪心电图</div></div>
-                    <div class="feature-card"><div class="feature-icon"><i aria-hidden="true" class="fa-solid fa-comments"></i></div><div class="font-extrabold text-[12.5px] t1 mb-1">读者弹幕仿真</div></div>
-                    <div class="feature-card"><div class="feature-icon"><i aria-hidden="true" class="fa-solid fa-code-fork"></i></div><div class="font-extrabold text-[12.5px] t1 mb-1">思维树分支推演</div></div>
-                    <div class="feature-card"><div class="feature-icon"><i aria-hidden="true" class="fa-solid fa-clapperboard"></i></div><div class="font-extrabold text-[12.5px] t1 mb-1">短剧与有声交付</div></div>
-                </div>
+                <section id="recent-work" class="recent-work hidden" aria-labelledby="recent-work-heading">
+                    <h2 id="recent-work-heading">最近的作品</h2>
+                    <div id="recent-work-content"></div>
+                </section>
             </div>
         </div>
 
         <!-- 小说工作台 -->
         <div id="novel-workspace" role="region" aria-labelledby="novel-title-heading" class="flex-1 flex flex-col overflow-hidden hidden">
             <!-- 作品头 -->
-            <div class="px-7 py-4 border-b flex flex-wrap items-center justify-between gap-3" style="border-color:var(--border); background:var(--card)">
+            <div class="workspace-heading">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2.5 flex-wrap">
                         <h1 id="novel-title-heading" class="text-[19px] font-black tracking-tight t1 truncate" style="font-family:var(--serif)"><button id="novel-title" type="button" class="block max-w-full truncate cursor-pointer hover:text-accent transition text-left" onclick="openConceptModal()" title="编辑策划案">书名</button></h1>
@@ -660,24 +812,31 @@
                     <p id="novel-logline" class="text-[12px] t2 mt-1.5 max-w-3xl truncate font-medium">一句话简介</p>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
-                    <button id="btn-continue" class="btn btn-primary btn-sm" onclick="openContinueModal()"><i aria-hidden="true" class="fa-solid fa-forward"></i> 批量续写</button>
-                    <button id="btn-rename" class="btn btn-outline btn-sm" onclick="openRenameModal()"><i aria-hidden="true" class="fa-solid fa-i-cursor"></i> 重命名</button>
-                    <button id="btn-rollback" class="btn btn-outline btn-sm" onclick="openRollbackModal()"><i aria-hidden="true" class="fa-solid fa-clock-rotate-left"></i> 时光机回滚</button>
-                    <button id="btn-history-repair" class="btn btn-outline btn-sm hidden" onclick="openHistoryRepairModal()"><i aria-hidden="true" class="fa-solid fa-timeline"></i> 历史状态修复</button>
-                    <button id="btn-export-txt" class="btn btn-outline btn-sm" onclick="exportFullTxt()"><i aria-hidden="true" class="fa-solid fa-file-lines text-ok"></i> TXT</button>
-                    <button id="btn-export-md" class="btn btn-outline btn-sm" onclick="exportMarkdown()"><i aria-hidden="true" class="fa-solid fa-file-arrow-down text-accent"></i> Markdown</button>
-                    <button id="btn-export-epub" class="btn btn-outline btn-sm" onclick="exportEpub()"><i aria-hidden="true" class="fa-solid fa-book text-warn"></i> EPUB</button>
-                    <button id="btn-export-zip" class="icon-btn" onclick="exportBackup()" title="备份完整项目（含快照/图谱/记忆）" aria-label="备份项目"><i aria-hidden="true" class="fa-solid fa-box-archive text-[13px]" style="color:var(--danger)"></i></button>
+                    <button id="btn-new-chapter" class="btn btn-primary btn-sm" onclick="openNewChapterEditor()"><i aria-hidden="true" class="fa-solid fa-plus"></i> 写新章</button>
+                    <button id="btn-publication-preview" class="btn btn-outline btn-sm" onclick="withLoading(this, openPublicationPreview)"><i aria-hidden="true" class="fa-solid fa-file-lines"></i> 交稿预览</button>
+                    <details class="action-menu" id="project-tools">
+                        <summary class="btn btn-outline btn-sm"><i aria-hidden="true" class="fa-solid fa-ellipsis"></i> 作品操作</summary>
+                        <div class="project-menu">
+                            <button id="btn-rename" class="btn btn-ghost btn-sm" onclick="openRenameModal()"><i aria-hidden="true" class="fa-solid fa-i-cursor"></i> 重命名</button>
+                            <button id="btn-rollback" class="btn btn-ghost btn-sm" onclick="openRollbackModal()"><i aria-hidden="true" class="fa-solid fa-clock-rotate-left"></i> 章节回滚</button>
+                            <button id="btn-history-repair" class="btn btn-ghost btn-sm hidden" onclick="openHistoryRepairModal()"><i aria-hidden="true" class="fa-solid fa-timeline"></i> 历史状态修复</button>
+                            <button id="btn-export-txt" class="btn btn-ghost btn-sm" onclick="exportFullTxt()"><i aria-hidden="true" class="fa-solid fa-file-lines text-ok"></i> 导出 TXT</button>
+                            <button id="btn-export-md" class="btn btn-ghost btn-sm" onclick="exportMarkdown()"><i aria-hidden="true" class="fa-solid fa-file-arrow-down text-accent"></i> 导出 Markdown</button>
+                            <button id="btn-continue" class="btn btn-ghost btn-sm" onclick="openContinueModal()"><i aria-hidden="true" class="fa-solid fa-forward"></i> 批量续写</button>
+                            <button id="btn-export-epub" class="btn btn-ghost btn-sm" onclick="exportEpub()"><i aria-hidden="true" class="fa-solid fa-book text-warn"></i> 导出 EPUB</button>
+                            <button id="btn-export-zip" class="btn btn-ghost btn-sm" onclick="exportBackup()" title="备份完整项目（含快照/图谱/记忆）" aria-label="备份项目"><i aria-hidden="true" class="fa-solid fa-box-archive text-[13px]" ></i> 备份项目</button>
+                        </div>
+                    </details>
                 </div>
             </div>
 
             <!-- 标签页 -->
             <div id="workspace-tabs" role="tablist" aria-label="作品工作区" onkeydown="tabKeydown(event)" class="px-7 border-b flex overflow-x-auto" style="border-color:var(--border); background:var(--card)">
-                <button onclick="switchTab('chapters')" id="tab-btn-chapters" role="tab" aria-controls="tab-chapters" aria-selected="true" tabindex="0" class="tab-btn active"><i aria-hidden="true" class="fa-solid fa-book-open"></i> 沉浸阅读</button>
+                <button onclick="switchTab('chapters')" id="tab-btn-chapters" role="tab" aria-controls="tab-chapters" aria-selected="true" tabindex="0" class="tab-btn active"><i aria-hidden="true" class="fa-solid fa-book-open"></i> 章节</button>
                 <button onclick="switchTab('graph')" id="tab-btn-graph" role="tab" aria-controls="tab-graph" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-diagram-project"></i> 实体图谱</button>
                 <button onclick="switchTab('branching')" id="tab-btn-branching" role="tab" aria-controls="tab-branching" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-code-fork"></i> 分支推演</button>
                 <button onclick="switchTab('foreshadowing')" id="tab-btn-foreshadowing" role="tab" aria-controls="tab-foreshadowing" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-scroll"></i> 伏笔账本</button>
-                <button onclick="switchTab('outline')" id="tab-btn-outline" role="tab" aria-controls="tab-outline" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-map"></i> 总纲大纲</button>
+                <button onclick="switchTab('outline')" id="tab-btn-outline" role="tab" aria-controls="tab-outline" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-map"></i> 分卷大纲</button>
                 <button onclick="switchTab('characters')" id="tab-btn-characters" role="tab" aria-controls="tab-characters" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-user-group"></i> 人物卡</button>
                 <button onclick="switchTab('pacing')" id="tab-btn-pacing" role="tab" aria-controls="tab-pacing" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-wave-square"></i> 情绪心电图</button>
                 <button onclick="switchTab('multimodal')" id="tab-btn-multimodal" role="tab" aria-controls="tab-multimodal" aria-selected="false" tabindex="-1" class="tab-btn"><i aria-hidden="true" class="fa-solid fa-clapperboard"></i> 短剧与演播</button>
@@ -692,27 +851,39 @@
                         <h2 id="chapters-nav-heading" class="text-[10.5px] font-extrabold t3 tracking-widest uppercase mb-2 px-1">章节目录</h2>
                         <div id="chapters-nav-list" class="flex-1 overflow-y-auto space-y-0.5 pr-1"></div>
                     </nav>
-                    <article class="flex-1 card p-8 overflow-y-auto flex flex-col min-w-0" id="reader-scroll" aria-labelledby="current-chapter-title" style="position:relative; min-width:480px">
+                    <article class="flex-1 card p-8 overflow-y-auto flex flex-col min-w-0" id="reader-scroll" aria-labelledby="current-chapter-title" style="position:relative">
                         <div id="reader-progress" role="progressbar" aria-label="章节阅读进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
-                        <div class="pb-5 mb-5 border-b" style="border-color:var(--border)">
-                            <div class="flex justify-between items-start gap-3 mb-2.5">
+                        <div class="chapter-heading">
+                            <div class="flex justify-between items-start gap-3">
                                 <div class="min-w-0">
-                                    <h2 id="current-chapter-title" class="text-[22px] font-black t1 tracking-tight mb-1.5" style="font-family:var(--serif)">请选择章节</h2>
+                                    <h2 id="current-chapter-title" class="mb-1.5">请选择章节</h2>
                                     <div id="current-chapter-meta" class="text-[11px] t3 font-medium"></div>
+                                    <button id="btn-review-rewrite" class="btn btn-soft btn-sm mt-2 hidden" onclick="withLoading(this, reviewAvailableRewrite)">
+                                        <i aria-hidden="true" class="fa-solid fa-code-compare"></i> 审阅重写稿
+                                    </button>
                                 </div>
                             </div>
-                            <div class="flex flex-wrap items-center justify-end gap-1.5">
-                                <div class="flex items-center card-flat overflow-hidden" style="border-radius:10px">
-                                    <button class="icon-btn !border-0 !rounded-none !w-8 !h-8" onclick="adjustFont(-1)" title="减小字号" aria-label="减小字号"><i aria-hidden="true" class="fa-solid fa-minus text-[10px]"></i></button>
-                                    <button class="icon-btn !border-0 !rounded-none !w-8 !h-8" onclick="adjustFont(1)" title="增大字号" aria-label="增大字号"><i aria-hidden="true" class="fa-solid fa-plus text-[10px]"></i></button>
-                                </div>
+                            <div class="chapter-actions">
+                                <button id="btn-chapter-edit" class="btn btn-primary btn-sm" onclick="openChapterEditModal()" title="编辑本章正文" aria-label="编辑本章正文"><i aria-hidden="true" class="fa-solid fa-pen text-[12px]"></i> 编辑正文</button>
                                 <button id="compliance-chip" type="button" tabindex="0" class="chip chip-danger hidden cursor-pointer" onclick="openCompliancePanel(this)" title="查看合规风险" aria-label="查看合规风险" aria-controls="reader-rail" aria-expanded="false"><i aria-hidden="true" class="fa-solid fa-triangle-exclamation"></i> <span id="compliance-count"></span></button>
-                                <button id="btn-audit-history" class="btn btn-outline btn-sm" onclick="openAuditHistoryModal()" title="查看机器质检与人工审阅历史" disabled><i aria-hidden="true" class="fa-solid fa-clipboard-check"></i> <span class="hidden xl:inline">审阅记录</span></button>
+                                <button id="btn-audit-history" class="btn btn-outline btn-sm" onclick="openAuditHistoryModal()" title="查看机器质检与人工审阅历史" disabled><i aria-hidden="true" class="fa-solid fa-clipboard-check"></i> <span>审阅</span></button>
                                 <button id="btn-state-reconcile" class="btn btn-soft btn-sm hidden" onclick="confirmStateReconciliation()" title="保留本章正文，仅调用状态模型提取人物、关系和伏笔变化"><i aria-hidden="true" class="fa-solid fa-list-check"></i> <span class="hidden xl:inline">提取本章状态</span></button>
-                                <button id="btn-chapter-edit" class="icon-btn" onclick="openChapterEditModal()" title="编辑本章正文" aria-label="编辑本章正文"><i aria-hidden="true" class="fa-solid fa-pen text-[12px]"></i></button>
-                                <button id="btn-outline-edit" class="icon-btn" onclick="openOutlineModal()" title="编辑本章细纲（重写后生效）" aria-label="编辑细纲"><i aria-hidden="true" class="fa-solid fa-list-check text-[12px]"></i></button>
-                                <button id="btn-regenerate" class="btn btn-outline btn-sm" onclick="confirmRegenerate()" title="整章重新生成" aria-label="整章重新生成"><i aria-hidden="true" class="fa-solid fa-rotate"></i> <span class="hidden xl:inline">重写</span></button>
-                                <button id="btn-reader-sim" class="btn btn-soft btn-sm" onclick="withLoading(this, triggerReaderSim)" title="推演读者弹幕与留存" aria-label="推演读者弹幕与留存"><i aria-hidden="true" class="fa-solid fa-comments"></i> <span class="hidden xl:inline">读者推演</span></button>
+                                <details class="action-menu" id="chapter-tools">
+                                    <summary class="btn btn-outline btn-sm"><i aria-hidden="true" class="fa-solid fa-ellipsis"></i> 工具</summary>
+                                    <div class="project-menu chapter-tool-menu">
+                                        <button id="btn-outline-edit" class="btn btn-ghost btn-sm" onclick="openOutlineModal()" aria-label="编辑细纲"><i aria-hidden="true" class="fa-solid fa-list-check"></i> 编辑细纲</button>
+                                        <button id="btn-regenerate" class="btn btn-ghost btn-sm" onclick="confirmRegenerate()" aria-label="整章重新生成"><i aria-hidden="true" class="fa-solid fa-rotate"></i> 整章重写</button>
+                                        <button id="btn-reader-sim" class="btn btn-ghost btn-sm" onclick="withLoading(this, triggerReaderSim)" aria-label="推演读者弹幕与留存"><i aria-hidden="true" class="fa-solid fa-comments"></i> 读者推演</button>
+                                        <div class="font-settings flex items-center justify-between gap-2">
+                                            <span class="text-[12px] t2">正文字号</span>
+                                            <div class="flex items-center gap-1">
+                                                <button class="icon-btn !w-8 !h-8" onclick="adjustFont(-1)" title="减小字号" aria-label="减小字号"><i aria-hidden="true" class="fa-solid fa-minus text-[10px]"></i></button>
+                                                <button class="icon-btn !w-8 !h-8" onclick="adjustFont(1)" title="增大字号" aria-label="增大字号"><i aria-hidden="true" class="fa-solid fa-plus text-[10px]"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+                                <span class="toolbar-spacer" aria-hidden="true"></span>
                                 <button class="icon-btn" id="btn-rail-toggle" onclick="toggleReaderRail(undefined, this)" title="读者与合规分析面板" aria-label="打开读者与合规分析面板" aria-controls="reader-rail" aria-expanded="false"><i aria-hidden="true" class="fa-solid fa-chart-pie text-[12px]"></i></button>
                             </div>
                         </div>
@@ -749,7 +920,7 @@
                                     </svg>
                                     <div class="absolute inset-0 flex flex-col items-center justify-center">
                                         <span id="retention-pct" class="text-[16px] font-black t1 mono">--</span>
-                                        <span class="text-[8.5px] t3 font-bold tracking-wider">读完率</span>
+                                        <span class="text-[9px] t3 font-bold">模型估计</span>
                                     </div>
                                 </div>
                                 <p id="stat-sentiment-summary" class="text-[11px] t2 leading-relaxed font-medium">推演本章读者心智，获取留存预测与逐段弹幕。</p>
@@ -996,44 +1167,131 @@
 
 <!-- 整章编辑 -->
 <div id="modal-chapter" class="modal-mask" onmousedown="maskClick(event,'modal-chapter')">
-    <div class="modal max-w-[42rem]" onmousedown="event.stopPropagation()">
+    <div class="modal chapter-editor" onmousedown="event.stopPropagation()">
         <div class="modal-head">
             <div>
-                <h2 class="text-[14px] font-extrabold t1">编辑本章</h2>
+                <p class="studio-kicker">正文编辑</p>
+                <h2 id="ce-heading" class="editorial-title">编辑本章</h2>
                 <p id="ce-meta" class="text-[11px] t3 mt-0.5"></p>
             </div>
             <button class="icon-btn" onclick="closeModal('modal-chapter')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
         </div>
-        <div class="modal-body">
-            <textarea id="ce-text" aria-label="本章正文" rows="16" class="textarea" style="font-family:var(--serif); font-size:14px; line-height:2"></textarea>
+        <div class="modal-body editor-grid">
+            <div>
+                <div id="ce-title-field" class="mb-3">
+                    <label class="label" for="ce-title">章节标题</label>
+                    <input id="ce-title" class="input" maxlength="200" oninput="stashChapterDraft()">
+                </div>
+                <label class="label" for="ce-text">本章正文</label>
+                <textarea id="ce-text" rows="14" class="textarea editor-prose" oninput="stashChapterDraft()" onkeydown="chapterEditorKeydown(event)"></textarea>
+            </div>
+            <aside class="editor-notes" aria-label="章节写作参考">
+                <div><h3 class="label">细纲</h3><p id="ce-outline" class="t2 text-[13px]"></p></div>
+                <div><h3 class="label">审稿备注</h3><p id="ce-review" class="t2 text-[13px]"></p></div>
+                <p id="ce-draft-status" class="t2 text-[12px]" role="status"></p>
+                <button id="ce-reload" type="button" class="btn btn-soft btn-sm hidden" onclick="withLoading(this, compareLatestChapterDraft)">核对最新正式稿</button>
+                <button id="ce-download" type="button" class="btn btn-outline btn-sm hidden" onclick="downloadChapterDraft()">下载草稿</button>
+                <button id="ce-reset" class="btn btn-outline btn-sm hidden" onclick="resetChapterDraft()">载入当前正文</button>
+                <button id="ce-audit" class="btn btn-outline btn-sm" onclick="withLoading(this, openAuditHistoryModal)"><i aria-hidden="true" class="fa-solid fa-clipboard-check"></i> 审阅已保存正文</button>
+                <button id="ce-versions" class="btn btn-outline btn-sm" onclick="withLoading(this, openChapterVersions)">章节版本</button>
+            </aside>
+            <section id="ce-conflict" class="editor-conflict hidden" aria-labelledby="ce-conflict-heading">
+            <h3 id="ce-conflict-heading">这份草稿基于旧正文</h3>
+            <p>编辑区保留了你的草稿。对照原文和当前稿，手动合并后再确认；也可以先下载草稿。</p>
+            <div class="rewrite-grid editor-compare">
+                <section><h4 class="label">草稿基于</h4><pre id="ce-conflict-base" tabindex="0" class="rewrite-prose"></pre></section>
+                <section><h4 class="label">当前已保存</h4><pre id="ce-conflict-current" tabindex="0" class="rewrite-prose"></pre></section>
+            </div>
+            <div class="editor-conflict-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="downloadChapterDraft()">下载我的草稿</button>
+                <button type="button" class="btn btn-soft btn-sm" onclick="acceptRecoveredDraft()">已核对，使用编辑区稿件</button>
+            </div>
+            </section>
         </div>
-        <div class="modal-foot">
-            <button class="btn btn-outline" onclick="closeModal('modal-chapter')">取消</button>
-            <button class="btn btn-primary" onclick="withLoading(this, saveChapterEdit)"><i aria-hidden="true" class="fa-solid fa-check"></i> 保存</button>
+        <div class="modal-foot editor-actions">
+            <span id="ce-count" class="t3 text-[12px] editor-count"></span>
+            <button class="btn btn-outline" onclick="closeModal('modal-chapter')">关闭</button>
+            <button id="ce-save" class="btn btn-primary" onclick="withLoading(this, saveChapterEdit)"><i aria-hidden="true" class="fa-solid fa-check"></i> 保存</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-chapter-rewrite" class="modal-mask" onmousedown="maskClick(event,'modal-chapter-rewrite')">
+    <div class="modal rewrite-review" onmousedown="event.stopPropagation()">
+        <div class="modal-head">
+            <div><h2 class="text-[17px] font-bold t1">审阅整章重写稿</h2><p id="chapter-rewrite-meta" class="t2 text-[12px] mt-1"></p></div>
+            <button class="icon-btn" onclick="closeModal('modal-chapter-rewrite')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="rewrite-grid">
+                <section class="rewrite-pane"><h3 class="label" id="rewrite-before-title">当前正文</h3><div class="rewrite-prose" id="rewrite-before" tabindex="0" aria-labelledby="rewrite-before-title"></div></section>
+                <section class="rewrite-pane"><h3 class="label" id="rewrite-after-title">重写稿</h3><div class="rewrite-prose" id="rewrite-after" tabindex="0" aria-labelledby="rewrite-after-title"></div></section>
+            </div>
+            <p id="chapter-rewrite-effects" class="t2 text-[12px] mt-3"></p>
+            <section id="rewrite-changes" class="hidden mt-3" aria-label="选择改稿段落">
+                <p class="label">或逐段采纳</p>
+                <p class="t2 text-[12px] mb-2">仅合并勾选的变更。混合稿的叙事状态需要重新提取。</p>
+                <div id="rewrite-hunks"></div>
+            </section>
+        </div>
+        <div class="modal-foot editor-actions">
+            <button class="btn btn-outline" onclick="withLoading(this, discardChapterRewrite)">放弃重写稿</button>
+            <button id="chapter-rewrite-partial" class="btn btn-outline hidden" onclick="withLoading(this, applySelectedRewrite)">采纳选中段落</button>
+            <button id="chapter-rewrite-apply" class="btn btn-primary" onclick="withLoading(this, applyChapterRewrite)">采纳重写稿</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-chapter-versions" class="modal-mask" onmousedown="maskClick(event,'modal-chapter-versions')">
+    <div class="modal rewrite-review" onmousedown="event.stopPropagation()">
+        <div class="modal-head">
+            <h2 class="text-[17px] font-bold t1">章节版本</h2>
+            <button class="icon-btn" onclick="closeModal('modal-chapter-versions')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <label class="label" for="chapter-version-list">历史稿</label>
+            <select class="select mb-3" id="chapter-version-list" onchange="withLoading(this, loadChapterVersion)"></select>
+            <div class="rewrite-grid">
+                <section class="rewrite-pane"><h3 class="label">已保存的正文</h3><div id="chapter-version-current" class="rewrite-prose"></div></section>
+                <section class="rewrite-pane"><h3 class="label">选中的历史稿</h3><div id="chapter-version-previous" class="rewrite-prose"></div></section>
+            </div>
+        </div>
+        <div class="modal-foot editor-actions">
+            <button class="btn btn-outline" onclick="closeModal('modal-chapter-versions')">返回编辑</button>
+            <button id="chapter-version-restore" class="btn btn-primary" onclick="withLoading(this, confirmChapterVersionRestore)" disabled>恢复此历史稿</button>
         </div>
     </div>
 </div>
 
 <!-- 章节质量审阅 -->
 <div id="modal-audit-history" class="modal-mask" onmousedown="maskClick(event,'modal-audit-history')">
-    <div class="modal max-w-[48rem]" onmousedown="event.stopPropagation()">
+    <div class="modal audit-workbench" onmousedown="event.stopPropagation()">
         <div class="modal-head">
             <div>
-                <h2 class="text-[14px] font-extrabold t1 flex items-center gap-2"><i aria-hidden="true" class="fa-solid fa-clipboard-check text-accent"></i> 章节质量审阅</h2>
+                <p class="studio-kicker">审稿工作台</p>
+                <h2 class="editorial-title">章节审阅</h2>
                 <p id="audit-history-subtitle" class="text-[10.5px] t3 mt-1"></p>
             </div>
             <button class="icon-btn" onclick="closeModal('modal-audit-history')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
         </div>
-        <div class="modal-body space-y-4">
-            <div class="card-flat p-3 text-[10.5px] t2 leading-relaxed"><i aria-hidden="true" class="fa-solid fa-circle-info text-accent mr-1"></i>机器质检是辅助证据，不等于事实或发布许可；人工结论会与当前正文摘要绑定，正文变化后自动失效，但历史仍保留。</div>
-            <div id="audit-current-summary"></div>
-            <section>
-                <h3 class="text-[11px] font-extrabold t3 tracking-widest uppercase mb-2">机器质检轨迹</h3>
-                <div id="audit-history-list" class="space-y-2.5"></div>
-            </section>
-            <section>
-                <h3 class="text-[11px] font-extrabold t3 tracking-widest uppercase mb-2">人工审阅历史</h3>
-                <div id="human-review-history" class="space-y-2.5"></div>
+        <div class="modal-body audit-workbench-grid">
+            <div class="audit-main">
+                <div id="audit-current-summary"></div>
+                <section id="audit-open-findings" class="hidden" aria-label="当前跨章问题"></section>
+                <p class="audit-coverage" id="audit-coverage"></p>
+                <details class="editorial-disclosure">
+                    <summary>审阅历史</summary>
+                    <h3 class="label mt-3">机器质检轨迹</h3>
+                    <div id="audit-history-list" class="space-y-2.5"></div>
+                    <h3 class="label mt-3">人工审阅历史</h3>
+                    <div id="human-review-history" class="space-y-2.5"></div>
+                </details>
+            </div>
+            <aside class="audit-inspector" aria-label="原文与人工意见">
+            <section id="audit-source-panel" class="audit-source-panel hidden" aria-labelledby="audit-source-heading">
+                <h3 id="audit-source-heading" class="label">引用原文</h3>
+                <p id="audit-source-status" class="t2 text-[12px]" role="status"></p>
+                <pre id="audit-source-text" class="rewrite-prose" tabindex="0" aria-labelledby="audit-source-heading"></pre>
             </section>
             <section class="card-flat p-4 space-y-3">
                 <div class="font-extrabold text-[12px] t1">记录当前正文的人工结论</div>
@@ -1049,9 +1307,13 @@
                     <textarea id="human-review-note" rows="3" maxlength="4000" class="textarea" placeholder="记录判断依据；选择“需要修改”时必填"></textarea>
                 </div>
             </section>
+            </aside>
         </div>
-        <div class="modal-foot">
+        <div class="modal-foot audit-footer">
             <button class="btn btn-outline" onclick="closeModal('modal-audit-history')">关闭</button>
+            <button class="btn btn-ghost btn-sm" onclick="withLoading(this, () => previewModelUse('audit'))">查看模型与用量</button>
+            <button class="btn btn-outline" onclick="withLoading(this, startSavedChapterAudit)" title="将本章和相关前文发给已配置的审稿模型">自动审稿</button>
+            <button id="audit-related" class="btn btn-outline" onclick="withLoading(this, confirmRelatedAudit)">复查相关章节</button>
             <button class="btn btn-primary" onclick="withLoading(this, saveHumanReview)"><i aria-hidden="true" class="fa-solid fa-check"></i> 保存人工结论</button>
         </div>
     </div>
@@ -1209,6 +1471,73 @@
     </div>
 </div>
 
+<!-- 存稿导入 -->
+<div id="modal-manuscript" class="modal-mask" onmousedown="maskClick(event,'modal-manuscript')">
+    <div class="modal manuscript-modal" onmousedown="event.stopPropagation()">
+        <div class="modal-head">
+            <h2 class="text-[17px] font-bold t1">导入存稿</h2>
+            <button class="icon-btn" onclick="closeModal('modal-manuscript')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body manuscript-form">
+            <div class="manuscript-fields">
+                <div><label class="label" for="ms-title">书名</label><input id="ms-title" class="input" maxlength="200" required></div>
+                <div><label class="label" for="ms-name">项目标识</label><input id="ms-name" class="input" maxlength="64" required></div>
+            </div>
+            <div id="ms-source">
+                <label class="label" for="ms-file">选择 DOCX、TXT 或 Markdown，可选择多个分章文件</label>
+                <input id="ms-file" type="file" class="input" multiple accept=".docx,.txt,.md,.markdown" onchange="withLoading(document.getElementById('ms-preview'), readManuscriptFile)">
+                <label class="label mt-4" for="ms-text">或粘贴正文</label>
+                <textarea id="ms-text" class="textarea manuscript-prose" rows="8" placeholder="按「第一章」或 Markdown 标题分章。你也可以在预览中调整章节。"></textarea>
+                <div class="mt-3"><button id="ms-preview" class="btn btn-outline" onclick="withLoading(this, previewManuscript)">预览分章</button></div>
+            </div>
+            <div id="ms-preview-pane" class="hidden">
+                <div class="manuscript-preview-top">
+                    <label class="label" for="ms-chapter-select">章节</label>
+                    <select class="select" id="ms-chapter-select" onchange="chooseManuscriptChapter()"></select>
+                    <button class="btn btn-ghost" onclick="returnToManuscriptSource()">重新分章</button>
+                </div>
+                <div class="manuscript-chapter">
+                    <label class="label" for="ms-chapter-title">章节标题</label>
+                    <input id="ms-chapter-title" class="input" maxlength="200" oninput="updateManuscriptChapter()">
+                    <label class="label mt-3" for="ms-chapter-body">章节正文</label>
+                    <textarea id="ms-chapter-body" class="textarea manuscript-prose" rows="10" oninput="updateManuscriptChapter()"></textarea>
+                    <div class="mt-2 flex items-center flex-wrap gap-2">
+                        <button id="ms-split" class="btn btn-outline btn-sm" onclick="splitManuscriptChapter()">在光标处分章</button>
+                        <button id="ms-merge" class="btn btn-outline btn-sm" onclick="mergeManuscriptChapter()">与上一章合并</button>
+                        <button id="ms-up" class="btn btn-outline btn-sm" onclick="moveManuscriptChapter(-1)">上移</button>
+                        <button id="ms-down" class="btn btn-outline btn-sm" onclick="moveManuscriptChapter(1)">下移</button>
+                        <button id="ms-remove" class="btn btn-ghost btn-sm" onclick="removeManuscriptPreviewChapter()">移出预览</button>
+                    </div>
+                </div>
+            </div>
+            <p id="ms-status" class="text-[12px] t2 mt-3" role="status"></p>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-outline" onclick="closeModal('modal-manuscript')">关闭</button>
+            <button id="ms-import" class="btn btn-primary" onclick="withLoading(this, submitManuscript)" disabled>导入作品</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-publication" class="modal-mask" onmousedown="maskClick(event,'modal-publication')">
+    <div class="modal manuscript-modal" onmousedown="event.stopPropagation()">
+        <div class="modal-head">
+            <h2 class="text-[17px] font-bold t1">交稿预览</h2>
+            <button class="icon-btn" onclick="closeModal('modal-publication')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="publication-note" class="text-[12px] t2"></p>
+            <pre id="publication-text" class="reader-pre mt-3" style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre>
+            <p class="label mt-4">平台参考 · 按最新官方规则核对</p>
+            <ul id="publication-rules" class="text-[12px] t2"></ul>
+        </div>
+        <div class="modal-foot flex-wrap">
+            <button class="btn btn-outline" onclick="downloadProjectExport('chapterBundle', modalContext('modal-publication'))">下载分章 TXT</button>
+            <button class="btn btn-primary" onclick="downloadProjectExport('docx', modalContext('modal-publication'))">下载整本 DOCX</button>
+        </div>
+    </div>
+</div>
+
 <!-- 新建小说弹窗 -->
 <div id="modal-create" class="modal-mask" onmousedown="maskClick(event,'modal-create')">
     <div class="modal max-w-[42rem]" onmousedown="event.stopPropagation()">
@@ -1218,7 +1547,7 @@
         </div>
         <div class="modal-body space-y-4">
             <div>
-                <p class="label"><i aria-hidden="true" class="fa-solid fa-bolt text-warn mr-1"></i>一键填入爆款模板</p>
+                <p class="label"><i aria-hidden="true" class="fa-solid fa-bolt text-warn mr-1"></i>选择构思示例</p>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <button class="preset-chip" onclick="applyPreset('death_replay')">💀 触摸死者记忆推演<br><span class="t3">诡异修仙 · 番茄快爽</span></button>
                     <button class="preset-chip" onclick="applyPreset('pawnshop')">⚖️ 诸天寿元当铺<br><span class="t3">幕后黑手 · 起点严谨</span></button>
@@ -1266,18 +1595,60 @@
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                <div><label class="label" for="new-chapters">首批全自动生成章节数</label><input type="number" id="new-chapters" value="3" min="1" max="20" step="1" required class="input"></div>
+                <div><label class="label" for="new-chapters">首批草稿章节数</label><input type="number" id="new-chapters" value="3" min="1" max="20" step="1" required class="input"></div>
                 <div><label class="label" for="new-volumes">全书规划总卷数</label><input type="number" id="new-volumes" value="3" min="1" max="10" step="1" required class="input"></div>
             </div>
+
+            <label class="check-chip"><input type="checkbox" id="new-adaptations"> 同时生成衍生内容（额外调用模型）</label>
+            <button class="btn btn-ghost btn-sm" onclick="withLoading(this, () => previewModelUse('create'))">查看模型与用量</button>
         </div>
         <div class="modal-foot">
             <button class="btn btn-outline" onclick="closeModal('modal-create')">取消</button>
-            <button class="btn btn-primary" onclick="withLoading(this, startAutoGenerate)"><i aria-hidden="true" class="fa-solid fa-rocket"></i> 启动全自动生产</button>
+            <button class="btn btn-primary" onclick="withLoading(this, startAutoGenerate)"><i aria-hidden="true" class="fa-solid fa-rocket"></i> 生成策划与草稿</button>
         </div>
     </div>
 </div>
 
 <!-- 续写弹窗 -->
+<div id="modal-continuation-plan" class="modal-mask" onmousedown="maskClick(event,'modal-continuation-plan')">
+    <div class="modal manuscript-modal" onmousedown="event.stopPropagation()">
+        <div class="modal-head">
+            <div>
+                <h2 class="text-[17px] font-bold t1">存稿续写规划</h2>
+                <p class="t2 text-[12px] mt-1">把续写时必须遵守的设定与角色现状写在这里。</p>
+            </div>
+            <button class="icon-btn" onclick="closeModal('modal-continuation-plan')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-4">
+            <div><label class="label" for="continuation-facts">已发生的剧情与人物现状</label><textarea id="continuation-facts" class="textarea" rows="4" maxlength="8000"></textarea></div>
+            <details class="card-flat p-3">
+                <summary class="t1 text-[13px] font-semibold">从存稿提取人物、时间线和伏笔</summary>
+                <p class="t2 text-[12px] mt-2">选 1–12 章。长章节发送章首与章末摘录，候选由你勾选确认。</p>
+                <div class="manuscript-fields mt-2">
+                    <div><label class="label" for="facts-start">起始章节</label><input id="facts-start" class="input" type="number" min="1" step="1"></div>
+                    <div><label class="label" for="facts-end">结束章节</label><input id="facts-end" class="input" type="number" min="1" step="1"></div>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <button class="btn btn-outline btn-sm" onclick="withLoading(this, () => previewModelUse('facts'))">查看模型与用量</button>
+                    <button class="btn btn-outline btn-sm" onclick="withLoading(this, extractManuscriptFacts)">提取候选设定</button>
+                </div>
+                <p id="facts-status" class="t2 text-[12px] mt-2" role="status"></p>
+                <div id="fact-candidates" class="space-y-2"></div>
+            </details>
+            <div><label class="label" for="continuation-direction">后续故事方向</label><textarea id="continuation-direction" class="textarea" rows="2" maxlength="4000" required></textarea></div>
+            <div class="manuscript-fields">
+                <div><label class="label" for="continuation-title">下一章标题</label><input id="continuation-title" class="input" maxlength="200" required></div>
+                <div><label class="label" for="continuation-limit">规划续写章节数</label><input id="continuation-limit" class="input" value="10" type="number" min="1" max="100" required></div>
+            </div>
+            <div><label class="label" for="continuation-scene">下一章要写什么</label><textarea id="continuation-scene" class="textarea" rows="3" maxlength="4000" required></textarea></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-outline" onclick="closeModal('modal-continuation-plan')">取消</button>
+            <button class="btn btn-primary" onclick="withLoading(this, saveContinuationPlan)">保存规划</button>
+        </div>
+    </div>
+</div>
+
 <div id="modal-continue" class="modal-mask" onmousedown="maskClick(event,'modal-continue')">
     <div class="modal max-w-sm" onmousedown="event.stopPropagation()">
         <div class="modal-head">
@@ -1290,11 +1661,31 @@
                 <label class="label" for="continue-count">本次续写章节数</label>
                 <input type="number" id="continue-count" value="3" min="1" max="10" step="1" required class="input">
             </div>
+
+            <label class="check-chip"><input type="checkbox" id="continue-adaptations"> 同时生成衍生内容（额外调用模型）</label>
+            <button class="btn btn-ghost btn-sm" onclick="withLoading(this, () => previewModelUse('continue'))">查看模型与用量</button>
+            <details id="continue-boundary-panel" class="hidden card-flat p-3">
+                <summary class="t1 text-[13px] font-semibold">调整总纲终章</summary>
+                <label class="label mt-2" for="continue-boundary">计划结束章</label>
+                <input id="continue-boundary" class="input" type="number" min="1" max="1000000" step="1">
+                <button class="btn btn-outline btn-sm mt-2" onclick="withLoading(this, saveContinuationBoundary)">更新终章</button>
+            </details>
         </div>
         <div class="modal-foot">
             <button class="btn btn-outline" onclick="closeModal('modal-continue')">取消</button>
             <button class="btn btn-primary" onclick="withLoading(this, startContinueGen)"><i aria-hidden="true" class="fa-solid fa-play"></i> 开始续写</button>
         </div>
+    </div>
+</div>
+
+<div id="modal-model-usage" class="modal-mask" onmousedown="maskClick(event,'modal-model-usage')">
+    <div class="modal manuscript-modal" onmousedown="event.stopPropagation()">
+        <div class="modal-head">
+            <h2 id="model-usage-heading" class="text-[17px] font-bold t1">模型与用量</h2>
+            <button class="icon-btn" onclick="closeModal('modal-model-usage')" aria-label="关闭"><i aria-hidden="true" class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="model-usage-details" class="modal-body space-y-3 t2 text-[13px]"></div>
+        <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-model-usage')">返回</button></div>
     </div>
 </div>
 
@@ -1500,7 +1891,12 @@
         const el = document.createElement('div');
         el.className = `toast toast-${type}`;
         el.innerHTML = `<i aria-hidden="true" class="fa-solid ${icons[type] || icons.info} mt-0.5"></i><span>${escapeHtml(msg)}</span>`;
-        document.getElementById('toast-box').appendChild(el);
+        const toasts = document.getElementById('toast-box');
+        if (type !== 'error' && type !== 'warn') {
+            for (const old of toasts.querySelectorAll('.toast-info, .toast-success')) old.remove();
+        }
+        while (toasts.children.length > 1) toasts.firstElementChild.remove();
+        toasts.appendChild(el);
         setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 3800);
     }
 
@@ -1514,8 +1910,25 @@
 
     const FOCUSABLE = 'button:enabled, [href], input:enabled, select:enabled, textarea:enabled, summary, [tabindex]:not([tabindex="-1"])';
 
+    let modalOpeningOrder = 0;
+    function orderedOpenModals() {
+        return [...document.querySelectorAll('.modal-mask.open')]
+            .sort((left, right) => (left._openedAt || 0) - (right._openedAt || 0));
+    }
+
+    function syncModalStack() {
+        const masks = orderedOpenModals();
+        masks.forEach((mask, index) => {
+            const covered = index < masks.length - 1;
+            mask.style.zIndex = String(60 + index);
+            mask.setAttribute('aria-hidden', String(covered));
+            if (covered) mask.setAttribute('inert', '');
+            else mask.removeAttribute('inert');
+        });
+    }
+
     function openModal(id) {
-        if (id === 'modal-create' && window._recoveryState?.blocks_all_projects) {
+        if (['modal-create', 'modal-manuscript'].includes(id) && window._recoveryState?.blocks_all_projects) {
             showToast('作品事务现场归属不明，已暂停新建；请先查看存储诊断', 'warn');
             openRecoveryModal();
             return;
@@ -1524,32 +1937,49 @@
         if (!mask) return;
         if (['modal-concept', 'modal-character', 'modal-outline', 'modal-chapter',
              'modal-rename', 'modal-edit', 'modal-rewrite', 'modal-rollback', 'modal-continue',
-             'modal-audit-history', 'modal-history-repair'].includes(id)) {
+             'modal-audit-history', 'modal-history-repair', 'modal-continuation-plan',
+             'modal-chapter-rewrite', 'modal-chapter-versions', 'modal-publication'].includes(id)) {
             try { mask._projectContext = captureProjectContext(); }
             catch (error) { showToast(error.message, 'warn'); return; }
         }
-        mask._returnFocus = document.activeElement;
+        const focused = document.activeElement;
+        mask._returnFocus = focused?.closest?.('.action-menu')?.querySelector('summary') || focused;
         mask.removeAttribute('inert');
         mask.setAttribute('aria-hidden', 'false');
+        mask._openedAt = ++modalOpeningOrder;
         mask.classList.add('open');
+        syncModalStack();
         const dialog = mask.querySelector('.modal');
-        if (dialog) requestAnimationFrame(() => dialog.focus({ preventScroll: true }));
+        const opening = mask._openedAt;
+        if (dialog) requestAnimationFrame(() => {
+            if (mask._openedAt === opening && mask.classList.contains('open') &&
+                !mask.hasAttribute('inert') && !dialog.contains(document.activeElement)) {
+                dialog.focus({ preventScroll: true });
+            }
+        });
     }
 
     function closeModal(id) {
         const mask = document.getElementById(id);
         if (!mask) return;
         if (id === 'modal-config') { configLoadToken++; configReadyToken = 0; }
+        if (id === 'modal-audit-history' && mask.classList.contains('open')) stashHumanReview(mask);
         mask.classList.remove('open');
         mask.setAttribute('aria-hidden', 'true');
         mask.setAttribute('inert', '');
+        syncModalStack();
         const returnFocus = mask._returnFocus;
         mask._returnFocus = null;
         if (returnFocus && returnFocus.isConnected) requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
     }
     function maskClick(e, id) { if (e.target === e.currentTarget) closeModal(id); }
+    function isCompositionKey(event) {
+        return event.isComposing || event.keyCode === 229;
+    }
+
     document.addEventListener('keydown', e => {
-        const openMasks = [...document.querySelectorAll('.modal-mask.open')];
+        if (isCompositionKey(e)) return;
+        const openMasks = orderedOpenModals();
         const activeMask = openMasks[openMasks.length - 1];
         const paletteMask = document.getElementById('palette-mask');
         const activeOverlay = activeMask || (paletteMask?.classList.contains('open') ? paletteMask : null);
@@ -1685,6 +2115,7 @@
             window._recoveryState = data.recovery || {requires_attention:false, blocks_all_projects:false, journals:[], guidance:[]};
             renderRecoveryAlert();
             renderNovelList();
+            renderRecentWork();
         } catch (e) {
             if (token !== bookshelfLoadToken) return;
             document.getElementById('novels-list').innerHTML = '<div class="empty-state text-[11px]"><i aria-hidden="true" class="fa-solid fa-plug-circle-xmark"></i>加载失败，请点击右上角刷新</div>';
@@ -1760,6 +2191,25 @@
             ? `未策划 · ${projectId || '未知项目'}` : rawTitle;
     }
 
+    function renderRecentWork() {
+        const section = document.getElementById('recent-work');
+        const content = document.getElementById('recent-work-content');
+        const novels = window._novels || [];
+        const rememberedId = localStorage.getItem('moirai_recent_project');
+        const project = novels.find(item => item.novel_id === rememberedId) || novels[0];
+        section.classList.toggle('hidden', !project);
+        if (!project) {
+            content.replaceChildren();
+            return;
+        }
+        const title = projectDisplayTitle(project);
+        content.innerHTML = `<button type="button" onclick="selectNovel(${inlineArg(project.novel_id)})">
+            <span class="novel-mono" aria-hidden="true"><i aria-hidden="true" class="fa-solid fa-book-open"></i></span>
+            <span><strong>${escapeHtml(title)}</strong><small>${Number(project.total_generated_chapters) || 0} 章</small></span>
+            <i class="fa-solid fa-arrow-right t2" aria-hidden="true"></i>
+        </button>`;
+    }
+
     function renderNovelList() {
         const listEl = document.getElementById('novels-list');
         const kw = (document.getElementById('novels-search').value || '').trim().toLowerCase();
@@ -1798,9 +2248,61 @@
         }).join('');
     }
 
+    function openStudioHome() {
+        complianceController?.abort();
+        novelLoadToken++;
+        chapterLoadToken++;
+        currentNovelId = '';
+        novelData = null;
+        sortedChapters = [];
+        selectedChapterIdx = selectedChapterNum = 0;
+        document.getElementById('novel-workspace').classList.add('hidden');
+        document.getElementById('welcome-view').classList.remove('hidden');
+        setSidebarOpen(false);
+        renderNovelList();
+        renderRecentWork();
+    }
+
+    let complianceController = null;
+
+    async function loadProjectCompliance(context) {
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        complianceController = controller;
+        let compliance, message = '';
+        try {
+            const response = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/compliance`, {
+                signal: controller?.signal,
+            });
+            compliance = await response.json();
+            if (!response.ok) message = compliance.detail || '合规扫描暂时不可用，请检查自定义词库';
+            else if (compliance.revision !== context.revision) message = '合规扫描对应的作品版本已变更，请刷新后重试';
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            message = '暂时无法完成合规扫描，请刷新后重试';
+        }
+        if (!isCurrentContext(context) || complianceController !== controller) return;
+        if (novelData.revision !== context.revision) {
+            void loadProjectCompliance(captureProjectContext());
+            return;
+        }
+        window._compliancePending = false;
+        window._complianceUnavailable = message;
+        (message ? [] : compliance.chapters || []).forEach(chapter => {
+            window._complianceMap[chapter.chapter_number] = chapter.hits;
+        });
+        for (const marker of document.querySelectorAll('#chapters-nav-list [data-compliance-chapter]')) {
+            marker.classList.toggle('hidden', !compCount(Number(marker.dataset.complianceChapter)));
+        }
+        renderComplianceRail();
+    }
+
     async function selectNovel(novelId, { preserveView = false } = {}) {
         const view = preserveView && currentNovelId === novelId && novelData ? captureWorkspaceView() : null;
         const token = ++novelLoadToken;
+        complianceController?.abort();
+        window._complianceMap = {};
+        window._complianceUnavailable = '';
+        window._compliancePending = true;
         chapterLoadToken++;
         if (!view) { selectedChapterIdx = 0; readerScrollTop = 0; }
         currentNovelId = novelId;
@@ -1818,18 +2320,13 @@
         document.getElementById('current-chapter-body').textContent = '正在加载…';
         document.getElementById('welcome-view').classList.add('hidden');
         document.getElementById('novel-workspace').classList.remove('hidden');
-        syncHeroTypewriter();
         setSidebarOpen(false);
         renderNovelList();
         switchTab(view?.tab || 'chapters');
 
         try {
-            const [res, cres] = await Promise.all([
-                fetch(`/api/novel/${encodeURIComponent(novelId)}`),
-                fetch(`/api/novel/${encodeURIComponent(novelId)}/compliance`)
-            ]);
+            const res = await fetch(`/api/novel/${encodeURIComponent(novelId)}`);
             const data = await res.json();
-            const compliance = await cres.json().catch(() => ({}));
             if (token !== novelLoadToken || currentNovelId !== novelId) return;
             if (!res.ok) throw new Error(data.detail || '项目详情加载失败');
             if (data.novel_id !== novelId || !data.revision) throw new Error('作品响应身份不一致，请刷新');
@@ -1838,28 +2335,16 @@
                 chapter._novelId = novelId;
                 chapter._revision = data.revision;
             }
-            window._complianceMap = {};
-            window._complianceUnavailable = '';
-            if (cres.ok && compliance.revision === data.revision) {
-                (compliance.chapters || []).forEach(c => { window._complianceMap[c.chapter_number] = c.hits; });
-            } else {
-                window._complianceUnavailable = cres.ok
-                    ? '合规扫描结果版本不一致，请刷新后重试'
-                    : (compliance.detail || '合规扫描暂时不可用，请检查自定义词库');
-            }
             workspace.removeAttribute('inert');
             workspace.setAttribute('aria-busy', 'false');
             await renderNovelWorkspace(view);
             if (token !== novelLoadToken || currentNovelId !== novelId) return false;
-            if (window._complianceUnavailable) {
-                const warningKey = `${novelId}:${window._complianceUnavailable}`;
-                if (window._lastComplianceWarning !== warningKey) {
-                    window._lastComplianceWarning = warningKey;
-                    showToast(window._complianceUnavailable, 'error');
-                }
-            } else {
-                window._lastComplianceWarning = '';
-            }
+            localStorage.setItem('moirai_recent_project', novelId);
+            document.getElementById('project-tools').open = false;
+            document.getElementById('chapter-tools').open = false;
+            if (sortedChapters.length) {
+                void loadProjectCompliance(captureProjectContext());
+            } else window._compliancePending = false;
             const reconciliation = novelData.state_reconciliation;
             if (reconciliation?.required) {
                 const key = `${novelId}:${reconciliation.chapters.join(',')}`;
@@ -1879,7 +2364,6 @@
             novelData = null;
             workspace.classList.add('hidden');
             document.getElementById('welcome-view').classList.remove('hidden');
-            syncHeroTypewriter();
             showToast('项目详情加载失败: ' + e, 'error');
         }
     }
@@ -1888,6 +2372,7 @@
     async function renderNovelWorkspace(view = null) {
         if (!novelData) return;
         const planningCheckpoint = novelData.planning_checkpoint;
+        document.getElementById('btn-review-rewrite').classList.toggle('hidden', !novelData.rewrite_candidate_chapter);
         const c = novelData.concept || {
             title: `主策划未完成 · ${novelData.novel_id}`, genre: '', logline: '已保存恢复请求；继续生成将从缺失阶段恢复。',
             commercial_target: null
@@ -1895,16 +2380,26 @@
         document.getElementById('novel-title').innerText = `《${c.title}》`;
         document.getElementById('novel-title').title = planningCheckpoint ? '主策划检查点为只读，完成恢复后可编辑' : '编辑策划案';
         document.getElementById('workspace-tabs').setAttribute('aria-label', `${c.title} · 作品工作区`);
-        document.getElementById('novel-genre').innerText = c.genre;
+        const genre = document.getElementById('novel-genre');
+        genre.innerText = c.genre;
+        genre.classList.toggle('hidden', !c.genre);
         document.getElementById('novel-stats').innerText = planningCheckpoint
             ? `待恢复：${planningCheckpoint.next_stage}`
-            : `已生成 ${novelData.chapters.length} 章 · ${novelData.summary.total_words} 字`;
+            : `${novelData.chapters.length} 章 · ${novelData.summary.total_words} 字`;
+        document.getElementById('btn-new-chapter').disabled = Boolean(
+            !novelData.concept || planningCheckpoint || novelData.pending_outline_plan
+        );
         document.getElementById('novel-logline').innerText = c.logline;
         for (const id of ['btn-rollback', 'btn-export-txt', 'btn-export-md', 'btn-export-epub']) {
             const control = document.getElementById(id);
             control.disabled = Boolean(planningCheckpoint);
             control.title = planningCheckpoint ? '请先恢复并完成主策划' : '';
         }
+        const continueButton = document.getElementById('btn-continue');
+        const needsContinuationPlan = novelData.imported_manuscript && !novelData.global_outline;
+        continueButton.innerHTML = needsContinuationPlan
+            ? '<i aria-hidden="true" class="fa-solid fa-map"></i> 续写规划'
+            : '<i aria-hidden="true" class="fa-solid fa-forward"></i> 批量续写';
         const badge = document.getElementById('novel-platform-badge');
         if (c.commercial_target) {
             badge.style.display = '';
@@ -2127,6 +2622,13 @@
             return `<span class="chip ${cls}">${escapeHtml(a || '中立')}</span>`;
         };
         tab.innerHTML = `
+            ${novelData.manuscript_facts?.length ? `<section class="card p-6">
+                <h2 class="text-[15px] font-extrabold t1 mb-3">作者确认的存稿设定</h2>
+                <ul class="space-y-2">${novelData.manuscript_facts.map(item => `<li class="card-flat p-3 text-[12px]">
+                    <p class="t1"><strong>${manifestFactLabel(item.kind)} · ${escapeHtml(item.subject)}</strong> ${escapeHtml(item.fact)}</p>
+                    <blockquote class="t2 mt-1">第 ${Number(item.source_chapter)} 章：“${escapeHtml(item.quote)}”</blockquote>
+                </li>`).join('')}</ul>
+            </section>` : ''}
             <div class="card p-6">
                 <h2 class="text-[15px] font-extrabold t1 flex items-center gap-2 mb-3"><i aria-hidden="true" class="fa-solid fa-earth-asia text-accent"></i> 世界版图：${escapeHtml(ws.world_name)}</h2>
                 <p class="text-[12px] t2 leading-relaxed card-flat p-4">${escapeHtml(ws.geography_overview)}</p>
@@ -2309,7 +2811,7 @@
             }
             html += `
             <button onclick="showChapter(${realIdx})" ${realIdx === selectedChapterIdx ? 'aria-current="page"' : ''} class="chap-item ${realIdx === selectedChapterIdx ? 'active' : ''}">
-                <span class="truncate flex items-center gap-1.5">${compCount(chap.chapter_number) ? '<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:var(--danger)"></span>' : ''}第${chap.chapter_number}章 ${escapeHtml(chap.title)}</span>
+                <span class="truncate flex items-center gap-1.5"><span aria-hidden="true" data-compliance-chapter="${chap.chapter_number}" class="w-1.5 h-1.5 rounded-full flex-shrink-0 ${compCount(chap.chapter_number) ? '' : 'hidden'}" style="background:var(--danger)"></span>第${chap.chapter_number}章 ${escapeHtml(chap.title)}</span>
                 <span class="text-[9.5px] t3 mono flex-shrink-0">${chap.word_count}字</span>
             </button>`;
         });
@@ -2369,6 +2871,143 @@
         return `<div class="mt-2"><div class="text-[10px] font-extrabold t3 mb-1">${escapeHtml(title)}</div><ul class="list-disc pl-4 space-y-1 text-[10.5px] t2">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>`;
     }
 
+    function renderAuditFindings(findings) {
+        if (!Array.isArray(findings) || !findings.length) return '';
+        return `<section class="audit-findings mt-3" aria-label="有原文依据的跨章问题">
+            ${findings.map(item => `<div class="audit-finding">
+                <p class="t1 text-[13px]"><strong>${item.certainty === 'contradiction' ? '可能冲突' : '需要复核'}</strong> · ${escapeHtml(item.issue)}</p>
+                <blockquote class="t2 text-[12px] mt-1">本章：“${escapeHtml(item.draft_quote)}”</blockquote>
+                <blockquote class="t2 text-[12px] mt-1">第 ${Number(item.source_chapter)} 章：“${escapeHtml(item.source_quote)}”</blockquote>
+                <button class="btn btn-ghost btn-sm mt-1" onclick="focusAuditQuote(${Number(item.source_chapter)}, ${inlineArg(item.source_quote)})">
+                    <i aria-hidden="true" class="fa-solid fa-arrow-up-right-from-square"></i> 查看第 ${Number(item.source_chapter)} 章原文
+                </button>
+            </div>`).join('')}
+        </section>`;
+    }
+
+    const findingCategories = {
+        knowledge:'人物知情', timeline:'时间线', location:'地点', ownership:'物品归属', foreshadowing:'伏笔', other:'其他',
+    };
+    const findingDecisions = {confirmed:'已确认冲突', dismissed:'已忽略', intentional:'有意安排'};
+
+    function renderActiveFindings(chapter, report) {
+        const panel = document.getElementById('audit-open-findings');
+        const findings = report?.findings?.filter(item => item.evidence_id) || [];
+        panel.classList.toggle('hidden', !findings.length);
+        panel.innerHTML = findings.map(item => {
+            const evidence = item.evidence_id;
+            if (!/^[0-9a-f]{64}$/.test(evidence)) return '';
+            const decision = chapter.finding_decisions?.[evidence];
+            const source = sortedChapters.find(earlier => earlier.chapter_number === item.source_chapter);
+            const stale = !source || (source.prose_sha256 && item.source_sha256 && source.prose_sha256 !== item.source_sha256);
+            const actions = decision
+                ? [['reopen','重新打开']]
+                : [['confirmed','确认冲突'],['dismissed','忽略'],['intentional','标记有意安排']];
+            return `<article class="card-flat p-3 mb-2">
+                <p class="t1 text-[13px]"><strong>${findingCategories[item.category] || findingCategories.other}</strong> · ${escapeHtml(item.issue)}</p>
+                <div class="audit-quote-pair">
+                    <blockquote><b>本章</b>${escapeHtml(item.draft_quote)}</blockquote>
+                    <blockquote><b>第 ${Number(item.source_chapter)} 章</b>${escapeHtml(item.source_quote)}</blockquote>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <button class="btn btn-ghost btn-sm" onclick="focusAuditQuote(${Number(item.source_chapter)}, ${inlineArg(item.source_quote)})">查看引用</button>
+                    <button class="btn btn-ghost btn-sm" onclick="focusAuditQuote(${Number(chapter.chapter_number)}, ${inlineArg(item.draft_quote)})">查看本章</button>
+                    ${stale ? '<span class="text-warn text-[12px]">引用版本已变动，请复查</span>' : actions.map(([value,label]) =>
+                        `<button class="btn btn-outline btn-sm" onclick="withLoading(this, () => saveAuditFinding('${evidence}','${value}'))">${label}</button>`).join('')}
+                </div>
+                ${decision ? `<p class="t2 text-[12px] mt-1">${findingDecisions[decision.decision] || ''}</p>` : ''}
+            </article>`;
+        }).join('');
+    }
+
+    async function saveAuditFinding(evidence, decision) {
+        const id = 'modal-audit-history';
+        const context = modalContext(id);
+        const modal = document.getElementById(id);
+        const number = modal._auditChapter;
+        const response = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/chapter/${number}/audit_decision`, {
+            method: 'POST', headers: {'Content-Type':'application/json'}, body: revisionBody(context, {evidence_id:evidence, decision}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || '未能保存标记');
+        if (!isCurrentContext(context) || modal._projectContext !== context) return;
+        novelData.revision = data.revision;
+        for (const chapter of sortedChapters) chapter._revision = data.revision;
+        const chapter = sortedChapters.find(item => item.chapter_number === number);
+        chapter.finding_decisions = data.decisions;
+        modal._projectContext = captureProjectContext();
+        renderActiveFindings(chapter, chapter.final_audit);
+    }
+
+    function confirmRelatedAudit() {
+        const id = 'modal-audit-history';
+        const context = modalContext(id);
+        const chapter = document.getElementById(id)._auditChapter;
+        const related = sortedChapters.filter(item => item.chapter_number > chapter &&
+            item.final_audit?.findings?.some(finding => finding.source_chapter === chapter)).map(item => item.chapter_number);
+        openConfirm('复查相关章节', `将复查第 ${[chapter, ...related].join('、')} 章，每章会把正文和相关前文摘录发送给审稿模型。`, '开始复查', async () => {
+            const response = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/chapter/${chapter}/audit_related`, {
+                method:'POST', headers:{'Content-Type':'application/json'}, body:revisionBody(context, {}),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || '无法启动复查');
+            closeProjectModal(id, context);
+            showToast(`已启动 ${data.chapters.length} 章复查`, 'success');
+            pollStatus(data.task_id);
+        });
+    }
+
+    async function focusAuditQuote(number, quote) {
+        const id = 'modal-audit-history';
+        const context = modalContext(id);
+        const modal = document.getElementById(id);
+        const chapter = sortedChapters.find(chapter => chapter.chapter_number === number);
+        if (!isCurrentContext(context) || !chapter) {
+            showToast('找不到这条引用对应的章节', 'warn');
+            return;
+        }
+        const request = modal._evidenceRequest = Symbol();
+        const current = () => isCurrentContext(context) && modal._projectContext === context &&
+            modal._evidenceRequest === request && modal.classList.contains('open');
+        const source = document.getElementById('audit-source-panel');
+        const heading = document.getElementById('audit-source-heading');
+        const status = document.getElementById('audit-source-status');
+        const prose = document.getElementById('audit-source-text');
+        heading.textContent = `第 ${number} 章 · ${chapter.title}`;
+        prose.textContent = '';
+        status.textContent = '正在读取原文…';
+        source.classList.remove('hidden');
+        try { await ensureChapterLoaded(chapter); }
+        catch (error) { if (current()) status.textContent = error.message || '读取原文失败'; return; }
+        if (!current()) return;
+        const start = chapter.full_text.indexOf(quote);
+        if (start < 0) {
+            status.textContent = '当前原文已找不到这段引用；下方保留的是当时的摘录。';
+            prose.textContent = quote;
+        } else {
+            const from = Math.max(0, start - 400);
+            const to = Math.min(chapter.full_text.length, start + quote.length + 400);
+            status.textContent = '显示引用与前后文，当前审阅保持不变。';
+            prose.textContent = `${from ? '…\n' : ''}${chapter.full_text.slice(from, to)}${to < chapter.full_text.length ? '\n…' : ''}`;
+        }
+        prose.focus({preventScroll:true});
+        source.scrollIntoView({block:'nearest'});
+    }
+
+    async function startSavedChapterAudit() {
+        const id = 'modal-audit-history';
+        const context = modalContext(id);
+        const number = document.getElementById(id)._auditChapter;
+        const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/chapter/${number}/audit`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: revisionBody(context, {}),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(result.detail || '无法启动本章审稿');
+        closeProjectModal(id, context);
+        showToast('本章审稿已启动', 'success');
+        pollStatus(result.task_id);
+    }
+
     function renderAuditHistory(chap) {
         const audits = Array.isArray(chap.audit_history) ? chap.audit_history : [];
         const reviews = Array.isArray(chap.human_review_history) ? chap.human_review_history : [];
@@ -2376,12 +3015,24 @@
         const visibleReviews = reviews.slice(-100);
         const finalAudit = chap.final_audit || null;
         const currentReview = chap.current_human_review || null;
+        renderActiveFindings(chap, finalAudit);
+        const coverage = document.getElementById('audit-coverage');
+        if (finalAudit?.service_error) coverage.textContent = '自动检查未完成，请人工核对或重试。';
+        else if (finalAudit?.stage === 'manual' || finalAudit?.searched_chapters) {
+            const sources = finalAudit.evidence_chapters || [];
+            const result = finalAudit.findings?.length ? `发现 ${finalAudit.findings.length} 条有原文依据的提示` : '在送审证据中未发现可核对的问题';
+            const scan = finalAudit.retrieval_coverage;
+            const searched = scan
+                ? `完整检索 ${scan.fully_searched_chapters}/${scan.eligible_chapters} 章${scan.searched_chapters > scan.fully_searched_chapters ? '，另有章节仅检索部分正文' : ''}${scan.query_truncated ? '；本章仅部分内容用于检索' : ''}`
+                : `本轮检索 ${finalAudit.searched_chapters || 0} 章`;
+            coverage.textContent = `${result}。${searched}${sources.length ? `。送审第 ${sources.join('、')} 章摘录` : '，未送审前文章节摘录'}。这不是全书通过。`;
+        } else coverage.textContent = '当前正文尚无独立跨章审稿记录。人工结论只对应当前正文版本。';
         document.getElementById('audit-history-subtitle').textContent = `第 ${chap.chapter_number} 章《${chap.title}》 · ${audits.length} 次机器检查 · ${reviews.length} 次人工结论`;
         document.getElementById('audit-current-summary').innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div class="card-flat p-3.5"><div class="text-[10px] t3 font-extrabold mb-1">当前正文机器证据</div><div class="text-[12px] font-extrabold ${chap.audit_status === 'passed' ? 'text-ok' : chap.audit_status === 'failed' ? 'text-danger' : 'text-warn'}">${escapeHtml(AUDIT_STATUS_LABELS[chap.audit_status] || AUDIT_STATUS_LABELS.unverified)}</div></div>
             <div class="card-flat p-3.5"><div class="text-[10px] t3 font-extrabold mb-1">当前正文人工结论</div><div class="text-[12px] font-extrabold ${chap.human_review_status === 'approved' ? 'text-ok' : chap.human_review_status === 'changes_requested' ? 'text-danger' : 'text-warn'}">${escapeHtml(HUMAN_REVIEW_LABELS[chap.human_review_status] || HUMAN_REVIEW_LABELS.unreviewed)}</div></div>
         </div>`;
-        const stageLabels = {legacy:'旧版', draft:'原稿', polished:'润色稿'};
+        const stageLabels = {legacy:'旧版', draft:'原稿', polished:'润色稿', manual:'正文审稿'};
         document.getElementById('audit-history-list').innerHTML = audits.length ? `${audits.length > visibleAudits.length ? `<div class="text-[10.5px] text-warn">为保持界面流畅，仅显示最近 ${visibleAudits.length} 条；完整历史仍保存在项目备份中。</div>` : ''}${[...visibleAudits].reverse().map(item => {
             const boundToCurrent = Boolean(finalAudit?.text_sha256 && item.text_sha256 === finalAudit.text_sha256);
             const state = item.service_error ? '服务不可用' : item.passed ? '通过' : '未通过';
@@ -2390,10 +3041,12 @@
             return `<article class="card-flat p-3.5">
                 <div class="flex items-start justify-between gap-3 flex-wrap"><div><span class="font-extrabold text-[12px] t1">${escapeHtml(stageLabels[item.stage] || item.stage || '未知阶段')} ${item.attempt ? `#${Number(item.attempt)}` : ''}</span><span class="ml-2 text-[10.5px] ${item.passed && !item.service_error ? 'text-ok' : 'text-danger'}">${escapeHtml(state)}</span></div>${boundToCurrent ? '<span class="chip chip-accent">匹配当前正文</span>' : '<span class="chip">历史正文</span>'}</div>
                 <div class="text-[10.5px] t3 mt-2">一致性 ${score}/10 · 节奏 ${pacing}/10 · ${item.cliffhanger_detected ? '检测到章末钩子' : '未检测到章末钩子'} · 摘要 ${escapeHtml(String(item.text_sha256 || 'legacy').slice(0, 12))}</div>
+                ${item.evidence_chapters?.length ? `<p class="t3 text-[10.5px] mt-1">检索 ${Number(item.searched_chapters || item.evidence_chapters.length)} 章，提交第 ${item.evidence_chapters.map(Number).join('、')} 章摘录</p>` : ''}
                 ${item.critique ? `<div class="mt-2 text-[11px] t2 leading-relaxed">${escapeHtml(item.critique)}</div>` : ''}
                 ${auditListSection('逻辑问题', item.logic_issues)}
                 ${auditListSection('人物 OOC', item.character_ooc_issues)}
                 ${auditListSection('修改指令', item.revision_directives)}
+                ${item === finalAudit ? '' : renderAuditFindings(item.findings)}
             </article>`;
         }).join('')}` : '<div class="empty-state !py-6"><i aria-hidden="true" class="fa-solid fa-clipboard"></i>本章暂无机器质检记录</div>';
         document.getElementById('human-review-history').innerHTML = reviews.length ? `${reviews.length > visibleReviews.length ? `<div class="text-[10.5px] text-warn">为保持界面流畅，仅显示最近 ${visibleReviews.length} 条；完整历史仍保存在项目备份中。</div>` : ''}${[...visibleReviews].reverse().map(item => {
@@ -2408,6 +3061,20 @@
         }).join('')}` : '<div class="empty-state !py-6"><i aria-hidden="true" class="fa-solid fa-user-check"></i>尚未记录人工审阅结论</div>';
     }
 
+    const pendingHumanReviews = new Map();
+
+    function stashHumanReview(modal) {
+        const key = modal._reviewDraftKey;
+        if (!key) return;
+        const decision = document.getElementById('human-review-decision').value;
+        const note = document.getElementById('human-review-note').value;
+        pendingHumanReviews.delete(key);
+        if (note || decision === 'changes_requested') {
+            pendingHumanReviews.set(key, {decision, note});
+            if (pendingHumanReviews.size > 100) pendingHumanReviews.delete(pendingHumanReviews.keys().next().value);
+        }
+    }
+
     async function openAuditHistoryModal() {
         if (!novelData || !sortedChapters[selectedChapterIdx]) { showToast('请先选择章节', 'warn'); return; }
         const context = captureProjectContext();
@@ -2416,9 +3083,16 @@
         try { await ensureChapterLoaded(chapter); }
         catch (error) { if (isCurrentContext(context)) showToast(error.message || String(error), 'error'); return; }
         if (!isCurrentContext(context) || selectedChapterNum !== chapterNumber) return;
-        openModal('modal-audit-history');
         const modal = document.getElementById('modal-audit-history');
+        if (modal.classList.contains('open')) stashHumanReview(modal);
+        openModal('modal-audit-history');
         modal._auditChapter = chapterNumber;
+        modal._reviewDraftKey = JSON.stringify([context.novelId, chapterNumber, chapter.prose_sha256 || context.revision]);
+        const draft = pendingHumanReviews.get(modal._reviewDraftKey);
+        document.getElementById('human-review-decision').value = draft?.decision || 'approved';
+        document.getElementById('human-review-note').value = draft?.note || '';
+        document.getElementById('audit-source-panel').classList.add('hidden');
+        modal._evidenceRequest = null;
         renderAuditHistory(chapter);
     }
 
@@ -2426,8 +3100,11 @@
         const modal = document.getElementById('modal-audit-history');
         const context = modalContext('modal-audit-history');
         const chapterNumber = modal._auditChapter;
-        const decision = document.getElementById('human-review-decision').value;
-        const note = document.getElementById('human-review-note').value.trim();
+        const decisionInput = document.getElementById('human-review-decision');
+        const noteInput = document.getElementById('human-review-note');
+        const decision = decisionInput.value;
+        const rawNote = noteInput.value;
+        const note = rawNote.trim();
         if (decision === 'changes_requested' && !note) throw new Error('选择“需要修改”时请填写具体意见');
         const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/chapter/${chapterNumber}/human_review`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2436,7 +3113,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.detail || '人工审阅保存失败');
         showToast(data.message || '人工审阅已记录', 'success');
-        if (!isCurrentContext(context) || currentNovelId !== data.novel_id || selectedChapterNum !== data.chapter_number) return;
+        if (!isCurrentContext(context) || modal._projectContext !== context || currentNovelId !== data.novel_id || selectedChapterNum !== data.chapter_number) return;
         const chapter = sortedChapters.find(item => item.chapter_number === chapterNumber);
         if (!chapter || !data.review || !data.revision) return;
         chapter.human_review_history = [...(chapter.human_review_history || []), data.review];
@@ -2445,7 +3122,11 @@
         novelData.revision = data.revision;
         for (const item of sortedChapters) item._revision = data.revision;
         modal._projectContext = Object.freeze({novelId: context.novelId, revision: data.revision, loadToken: context.loadToken});
-        document.getElementById('human-review-note').value = '';
+        if (decisionInput.value === decision && noteInput.value === rawNote) {
+            pendingHumanReviews.delete(modal._reviewDraftKey);
+            decisionInput.value = 'approved';
+            noteInput.value = '';
+        }
         document.getElementById('current-chapter-meta').textContent = chapterQualityMeta(chapter);
         renderAuditHistory(chapter);
     }
@@ -2507,7 +3188,20 @@
         document.querySelectorAll('#chapters-nav-list .chap-item').forEach(el => { el.classList.remove('active'); el.removeAttribute('aria-current'); });
         const activeEl = document.querySelector('#chapters-nav-list .chap-item[onclick="showChapter(' + idx + ')"]');
         if (activeEl) { activeEl.classList.add('active'); activeEl.setAttribute('aria-current', 'page'); }
+        revealMobileChapter();
         renderShortDramaAndAudio();
+    }
+
+    function revealMobileChapter() {
+        if (!window.matchMedia('(max-width: 640px)').matches) return;
+        const directory = document.getElementById('chapters-nav-list');
+        const active = directory.querySelector('[aria-current="page"]');
+        if (!active) return;
+        const visible = directory.getBoundingClientRect();
+        if (!visible.width) return;
+        const selected = active.getBoundingClientRect();
+        if (selected.right > visible.right) directory.scrollLeft += selected.right - visible.right;
+        else if (selected.left < visible.left) directory.scrollLeft += selected.left - visible.left;
     }
 
     function renderReaderSimSidebar() {
@@ -2928,7 +3622,10 @@
         if (!name || !idea) { showToast('请填写项目标识名和核心创意', 'warn'); return; }
         const res = await fetch('/api/novel/create', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, idea, target_platform, author_style, protagonist_persona, avoided_tropes, chapters, volumes })
+            body: JSON.stringify({
+                name, idea, target_platform, author_style, protagonist_persona, avoided_tropes, chapters, volumes,
+                include_adaptations: document.getElementById('new-adaptations').checked,
+            })
         });
         if (!res.ok) { const err = await res.json().catch(() => ({})); showToast(err.detail || '启动失败', 'error'); return; }
         const result = await res.json().catch(() => ({}));
@@ -2937,7 +3634,90 @@
         pollStatus(result.task_id);
     }
 
+    function readFactRange() {
+        const limit = Number(novelData?.summary?.current_chapter) || 1;
+        const start = readBoundedInteger('facts-start', 1, limit, '提取起始章');
+        const end = readBoundedInteger('facts-end', start, Math.min(limit, start + 11), '提取结束章');
+        return {start, end};
+    }
+
+    async function extractManuscriptFacts() {
+        const id = 'modal-continuation-plan';
+        const context = modalContext(id);
+        const range = readFactRange();
+        const response = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/manuscript_facts`, {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:revisionBody(context, range),
+        });
+        const data = await response.json();
+        const modal = document.getElementById(id);
+        if (!isCurrentContext(context) || modal._projectContext !== context || !modal.classList.contains('open')) return;
+        if (!response.ok || data.revision !== context.revision) throw new Error(data.detail || '作品已更新，请重新打开规划');
+        const previous = modal._factCandidates || [];
+        const approved = new Set(Array.from(document.querySelectorAll('#fact-candidates input:checked'), input => previous[Number(input.value)]).filter(Boolean).map(factIdentity));
+        const merged = new Map(previous.map(item => [factIdentity(item), item]));
+        for (const item of data.facts) {
+            if (merged.size >= 30) break;
+            if (!merged.has(factIdentity(item))) merged.set(factIdentity(item), item);
+        }
+        modal._factCandidates = Array.from(merged.values());
+        document.getElementById('fact-candidates').innerHTML = modal._factCandidates.map((item, index) => `<label class="block card-flat p-2 text-[12px] t2">
+            <input type="checkbox" value="${index}" ${approved.has(factIdentity(item)) ? 'checked' : ''}>
+            <strong>${manifestFactLabel(item.kind)} · ${escapeHtml(item.subject)}</strong> ${escapeHtml(item.fact)}
+            <blockquote class="mt-1">第 ${Number(item.source_chapter)} 章：“${escapeHtml(item.quote)}”</blockquote>
+        </label>`).join('');
+        document.getElementById('facts-status').textContent = modal._factCandidates.length
+            ? `共 ${modal._factCandidates.length} 条有原文引证的候选，勾选后会随续写规划保存。` : '这段范围内未得到可核对的设定，请调整章节范围或手写补充。';
+        void refreshUsage();
+    }
+
+    function factIdentity(item) { return JSON.stringify([item.kind, item.source_chapter, item.quote]); }
+    function manifestFactLabel(kind) {
+        return {character:'人物', timeline:'时间线', foreshadowing:'伏笔', alias:'别名'}[kind] || '设定';
+    }
+
+    async function saveContinuationPlan() {
+        const id = 'modal-continuation-plan';
+        const context = modalContext(id);
+        const value = key => document.getElementById(`continuation-${key}`).value.trim();
+        const body = {
+            story_so_far: value('facts'), direction: value('direction'),
+            next_title: value('title'), next_scene: value('scene'),
+            chapters_to_plan: readBoundedInteger('continuation-limit', 1, 100, '规划续写章节数'),
+        };
+        const factOptions = document.getElementById(id)._factCandidates || [];
+        const checked = Array.from(document.querySelectorAll('#fact-candidates input:checked'), item => factOptions[Number(item.value)]).filter(Boolean);
+        if (checked.length) body.confirmed_facts = checked;
+        if ((!body.story_so_far && !checked.length) || !body.direction || !body.next_title || !body.next_scene) {
+            throw new Error('请填写现有剧情、后续方向和下一章内容');
+        }
+        const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/continuation_plan`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: revisionBody(context, body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '无法保存续写规划');
+        closeProjectModal(id, context);
+        showToast(`续写规划已保存，下一章为第 ${data.chapter} 章`, 'success');
+        await refreshProjectContext(context);
+    }
+
     function openContinueModal() {
+        if (novelData?.imported_manuscript && !novelData.global_outline) {
+            const modal = document.getElementById('modal-continuation-plan');
+            if (modal._planNovelId !== currentNovelId || modal._planRevision !== novelData.revision) {
+                for (const key of ['facts', 'direction', 'title', 'scene']) document.getElementById(`continuation-${key}`).value = '';
+                document.getElementById('continuation-limit').value = '10';
+                const last = Number(novelData?.summary?.current_chapter) || 1;
+                document.getElementById('facts-start').value = String(Math.max(1, last - 5));
+                document.getElementById('facts-end').value = String(last);
+                modal._factCandidates = [];
+                document.getElementById('fact-candidates').innerHTML = '';
+                document.getElementById('facts-status').textContent = '';
+                modal._planNovelId = currentNovelId;
+                modal._planRevision = novelData.revision;
+            }
+            openModal('modal-continuation-plan');
+            return;
+        }
         if (!currentNovelId) return;
         const cur = novelData ? novelData.summary.current_chapter : 0;
         document.getElementById('continue-info').innerHTML =
@@ -2949,7 +3729,31 @@
                         ? '<br><strong>主策划结果等待晋升：</strong>概念、世界观和人物均已保存，不会重复调用主策划模型；晋升后仍会调用总纲与正文模型并可能产生费用。'
                         : `<br><strong>主策划尚未完成：</strong>将从已保存的 ${escapeHtml(novelData?.summary?.planning_stage || '缺失')} 阶段继续，不重复调用已提交阶段；随后完成总纲并写正文，缺失阶段都会调用模型并可能产生费用。`))
                 : '');
+        const boundary = novelData?.global_outline?.volumes?.at(-1)?.chapter_range?.end;
+        const panel = document.getElementById('continue-boundary-panel');
+        panel.classList.toggle('hidden', !boundary);
+        panel.open = Boolean(boundary && cur >= boundary);
+        if (boundary) {
+            document.getElementById('continue-boundary').value = String(boundary);
+            document.getElementById('continue-info').innerHTML += `<br>计划终章为第 ${Number(boundary)} 章。`;
+        }
         openModal('modal-continue');
+    }
+
+    async function saveContinuationBoundary() {
+        const id = 'modal-continue';
+        const context = modalContext(id);
+        const end = readBoundedInteger('continue-boundary', 1, 1_000_000, '总纲终章');
+        const response = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/continuation_boundary`, {
+            method:'PATCH', headers:{'Content-Type':'application/json'}, body:revisionBody(context, {end}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || '无法调整总纲终章');
+        const modal = document.getElementById(id);
+        if (modal._projectContext !== context) return;
+        closeProjectModal(id, context);
+        showToast(`总纲终章已设为第 ${data.end} 章`, 'success');
+        if (await refreshProjectContext(context)) openContinueModal();
     }
 
     async function startContinueGen() {
@@ -2957,7 +3761,10 @@
         const count = readBoundedInteger('continue-count', 1, 10, '续写章节数');
         const res = await fetch('/api/novel/continue', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: revisionBody(context, { name: context.novelId, count })
+            body: revisionBody(context, {
+                name: context.novelId, count,
+                include_adaptations: document.getElementById('continue-adaptations').checked,
+            })
         });
         if (!res.ok) { const err = await res.json().catch(() => ({})); showToast(err.detail || '续写启动失败', 'error'); return; }
         const result = await res.json().catch(() => ({}));
@@ -3044,6 +3851,12 @@
     function renderComplianceRail() {
         const chip = document.getElementById('compliance-chip');
         const box = document.getElementById('compliance-box');
+        if (window._compliancePending) {
+            chip.classList.add('hidden');
+            box.classList.remove('hidden');
+            box.innerHTML = '<div class="card p-4 text-[12px] t2" role="status">正在扫描作品正文…</div>';
+            return;
+        }
         if (window._complianceUnavailable) {
             chip.classList.remove('hidden');
             chip.setAttribute('aria-label', '合规扫描不可用');
@@ -3198,26 +4011,314 @@
         else { showToast(d.detail || '保存失败', 'error'); }
     }
 
+    function chapterDraftKey(context, chapter, append = false) {
+        return `moirai_editor:${context.novelId}:${chapter}${append ? ':new' : ''}`;
+    }
+
+    function readChapterDraft(key) {
+        for (const storage of ["sessionStorage", "localStorage"]) {
+            try {
+                const draft = JSON.parse(globalThis[storage]?.getItem(key));
+                if (draft) return draft;
+            } catch { /* Browser storage may be unavailable. */ }
+        }
+        return null;
+    }
+
+    function draftStorageValue(storage, key) {
+        try { return globalThis[storage]?.getItem(key) ?? null; }
+        catch { return null; }
+    }
+
+    function persistentDraftValue(key) { return draftStorageValue('localStorage', key); }
+
+    function removeStoredDraft(storage, key, expected) {
+        if (expected && draftStorageValue(storage, key) === expected) {
+            try { globalThis[storage]?.removeItem(key); } catch { /* Optional draft storage. */ }
+        }
+    }
+
+    function matchesEditorDraft(stored, text, title) {
+        if (!stored) return false;
+        try {
+            const draft = JSON.parse(stored);
+            return draft?.text === text && draft?.title === title;
+        } catch { return false; }
+    }
+
     function openChapterEditModal() {
-        const chap = sortedChapters[selectedChapterIdx];
-        if (!chap) { showToast('请先选择章节', 'warn'); return; }
-        if (typeof chap.full_text !== 'string') { showToast('章节正文仍在加载，请稍候', 'warn'); return; }
-        document.getElementById('ce-meta').innerText = `第 ${chap.chapter_number} 章 ${chap.title} · ${chap.word_count} 字`;
-        document.getElementById('ce-text').value = chap.full_text;
-        window._editingChapter = chap.chapter_number;
-        openModal('modal-chapter');
+        const chapter = sortedChapters[selectedChapterIdx];
+        if (!chapter || typeof chapter.full_text !== 'string') {
+            showToast('请等章节正文加载完成后再编辑', 'warn');
+            return;
+        }
+        loadChapterEditor(chapter);
+    }
+
+    function openNewChapterEditor() {
+        const number = Number(novelData?.summary?.current_chapter || sortedChapters.at(-1)?.chapter_number || 0) + 1;
+        loadChapterEditor({chapter_number: number, title: '', full_text: ''}, { append: true });
+    }
+
+    function loadChapterEditor(chapter, { append = false, recovered = null, rebind = false } = {}) {
+        const context = captureProjectContext();
+        const mask = document.getElementById('modal-chapter');
+        const outline = novelData.global_outline?.volumes?.flatMap(volume => volume.chapters || [])
+            .find(item => item.chapter_number === chapter.chapter_number);
+        const key = chapterDraftKey(context, chapter.chapter_number, append);
+        const draft = recovered || readChapterDraft(key);
+        const persistent = persistentDraftValue(key);
+        const localTab = draftStorageValue('sessionStorage', key);
+        mask._draftStoredValue = localTab && localTab !== persistent ? null : persistent;
+        document.getElementById('ce-versions').classList.toggle('hidden', append);
+        document.getElementById('ce-audit').classList.toggle('hidden', append);
+        document.getElementById('ce-heading').textContent = append ? '写新章' : '编辑本章';
+        document.getElementById('ce-title').value = draft?.title ?? chapter.title;
+        mask._originalTitle = chapter.title;
+        document.getElementById('ce-meta').textContent = append
+            ? `第 ${chapter.chapter_number} 章`
+            : `第 ${chapter.chapter_number} 章 · ${chapter.title}`;
+        document.getElementById('ce-outline').textContent =
+            [outline?.summary, outline?.main_conflict].filter(Boolean).join('\n\n') || '本章还没有细纲';
+        document.getElementById('ce-review').textContent =
+            chapter.current_human_review?.note || chapter.final_audit?.critique || '本章还没有审稿备注';
+        document.getElementById('ce-text').value = draft?.text ?? chapter.full_text;
+        mask._editorChapter = chapter.chapter_number;
+        mask._appendChapter = append;
+        mask._originalText = chapter.full_text;
+        const baseline = {title: chapter.title, text: chapter.full_text};
+        mask._draftBaseline = draft?.baseline ?? (draft && draft.revision !== context.revision ? null : baseline);
+        mask._recoveredRevision = draft?.revision;
+        mask._draftConflict = Boolean(draft && !append && (mask._draftBaseline
+            ? mask._draftBaseline.title !== baseline.title || mask._draftBaseline.text !== baseline.text
+            : draft.revision !== context.revision));
+        mask._draftAccepted = false;
+        document.getElementById('ce-conflict').classList.add('hidden');
+        document.getElementById('ce-reload').classList.add('hidden');
+        window._editingChapter = chapter.chapter_number;
+        if (rebind) mask._projectContext = context;
+        else openModal('modal-chapter');
+        renderChapterDraftStatus(draft ? '已恢复草稿' : '');
+    }
+
+    function renderChapterDraftStatus(message) {
+        const mask = document.getElementById('modal-chapter');
+        const text = document.getElementById('ce-text').value;
+        const count = (text.match(/\p{Script=Han}/gu) || []).length;
+        document.getElementById('ce-count').textContent = `${count.toLocaleString()} 个汉字`;
+        const pending = mask._draftConflict && !mask._draftAccepted;
+        const comparison = document.getElementById('ce-conflict');
+        if (pending && comparison.classList.contains('hidden')) {
+            const base = mask._draftBaseline;
+            document.getElementById('ce-conflict-base').textContent = base
+                ? [base.title, base.text].join('\n\n') : '旧格式草稿未记录原始正文。';
+            document.getElementById('ce-conflict-current').textContent = [mask._originalTitle, mask._originalText].join('\n\n');
+        }
+        comparison.classList.toggle('hidden', !pending);
+        document.getElementById('ce-save').disabled = pending;
+        document.getElementById('ce-draft-status').textContent = pending ? '正式稿已变动，先核对再保存。' : message;
+        const title = document.getElementById('ce-title').value;
+        const changed = text !== mask._originalText || title !== mask._originalTitle;
+        document.getElementById('ce-reset').classList.toggle('hidden', mask._appendChapter || !changed);
+        document.getElementById('ce-download').classList.toggle('hidden', !changed || pending);
+    }
+
+    function stashChapterDraft() {
+        const mask = document.getElementById('modal-chapter');
+        const context = modalContext('modal-chapter');
+        const key = chapterDraftKey(context, mask._editorChapter, mask._appendChapter);
+        const text = document.getElementById('ce-text').value;
+        const title = document.getElementById('ce-title').value;
+        let message = '';
+        if (text === mask._originalText && title === mask._originalTitle) {
+            removeStoredDraft('localStorage', key, mask._draftStoredValue);
+            removeStoredDraft('sessionStorage', key, draftStorageValue('sessionStorage', key));
+            mask._draftStoredValue = null;
+            mask._recoveredRevision = undefined;
+            mask._draftBaseline = {title: mask._originalTitle, text: mask._originalText};
+            mask._draftConflict = false;
+        } else {
+            const draft = JSON.stringify({revision: mask._recoveredRevision || context.revision, baseline: mask._draftBaseline, text, title});
+            try {
+                if (persistentDraftValue(key) !== mask._draftStoredValue) throw new Error('另一标签页保存了更新的草稿');
+                localStorage.setItem(key, draft);
+                mask._draftStoredValue = draft;
+                try { sessionStorage.removeItem(key); } catch { /* Old drafts were session scoped. */ }
+                message = '草稿已保存在本机浏览器';
+            } catch {
+                try {
+                    sessionStorage.setItem(key, draft);
+                    message = '本机草稿无法更新，当前修改暂存在此标签页。关闭前请保存。';
+                } catch { message = '草稿暂存空间不足，关闭前请保存正文。'; }
+            }
+        }
+        renderChapterDraftStatus(message);
+    }
+
+    async function compareLatestChapterDraft() {
+        const id = 'modal-chapter';
+        const mask = document.getElementById(id);
+        const context = modalContext(id);
+        if (mask._appendChapter || currentNovelId !== context.novelId) return;
+        const opening = mask._openedAt;
+        const applies = () => mask.classList.contains('open') && mask._openedAt === opening && mask._projectContext === context;
+        const text = document.getElementById('ce-text');
+        const title = document.getElementById('ce-title');
+        stashChapterDraft();
+        if (!await selectNovelForDraft(context) || !applies()) return;
+        const chapter = sortedChapters.find(item => item.chapter_number === mask._editorChapter);
+        if (!chapter) throw new Error('本章不在最新目录中。请先下载草稿，避免丢失。');
+        const latest = captureProjectContext();
+        await ensureChapterLoaded(chapter);
+        if (!applies() || !isCurrentContext(latest) || latest.revision !== novelData?.revision) return;
+        const selection = [text.selectionStart, text.selectionEnd, text.selectionDirection];
+        const scroll = text.scrollTop;
+        loadChapterEditor(chapter, {rebind:true, recovered:{revision:context.revision, baseline:mask._draftBaseline,
+            text:text.value, title:title.value}});
+        text.focus({preventScroll:true});
+        text.setSelectionRange?.(...selection);
+        text.scrollTop = scroll;
+    }
+
+    async function selectNovelForDraft(context) {
+        return isCurrentContext(context)
+            ? refreshProjectContext(context) : selectNovel(context.novelId, {preserveView:true});
+    }
+
+    function acceptRecoveredDraft() {
+        const mask = document.getElementById('modal-chapter');
+        if (!mask._draftConflict) return;
+        mask._draftAccepted = true;
+        renderChapterDraftStatus('已确认使用编辑区稿件，尚未保存。');
+        document.getElementById('ce-text').focus();
+    }
+
+    function downloadChapterDraft() {
+        const title = document.getElementById('ce-title').value;
+        const text = document.getElementById('ce-text').value;
+        const url = URL.createObjectURL(new Blob([title, '\n\n', text], {type:'text/plain;charset=utf-8'}));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Moirai-章节草稿.txt';
+        document.body.appendChild(link);
+        try { link.click(); }
+        finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 10_000); }
+    }
+
+    function chapterEditorKeydown(event) {
+        if (isCompositionKey(event)) return;
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            document.getElementById('ce-save').click();
+        }
+    }
+
+    function resetChapterDraft() {
+        const mask = document.getElementById('modal-chapter');
+        document.getElementById('ce-text').value = mask._originalText;
+        document.getElementById('ce-title').value = mask._originalTitle;
+        stashChapterDraft();
+        document.getElementById('ce-text').focus();
     }
 
     async function saveChapterEdit() {
+        const mask = document.getElementById('modal-chapter');
         const context = modalContext('modal-chapter');
+        if (mask._draftConflict && !mask._draftAccepted) return;
+        const chapter = mask._editorChapter ?? window._editingChapter;
         const text = document.getElementById('ce-text').value;
+        const append = mask._appendChapter;
+        const rawTitle = document.getElementById('ce-title').value;
+        const title = rawTitle.trim();
         if (!text.trim()) { showToast('正文不能为空', 'warn'); return; }
-        const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/chapter_text`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: revisionBody(context, { chapter: window._editingChapter, text })
+        if (!title && (append || mask._originalTitle)) { showToast('请填写新章标题', 'warn'); return; }
+        const key = chapterDraftKey(context, chapter, append);
+        const persistentAtSave = mask._draftStoredValue;
+        const tabAtSave = draftStorageValue('sessionStorage', key);
+        const action = append ? 'chapters' : 'chapter_text';
+        const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/${action}`, {
+            method: append ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: revisionBody(context, append ? { title, text } : { chapter, text, ...(title && title !== mask._originalTitle ? {title} : {}) })
         });
-        if (res.ok) { closeProjectModal('modal-chapter', context); showToast('本章已更新', 'success'); await refreshProjectContext(context); }
-        else { const err = await res.json().catch(() => ({})); showToast(err.detail || '保存失败', 'error'); }
+        if (res.ok) {
+            if (matchesEditorDraft(persistentAtSave, text, rawTitle)) removeStoredDraft('localStorage', key, persistentAtSave);
+            if (matchesEditorDraft(tabAtSave, text, rawTitle)) removeStoredDraft('sessionStorage', key, tabAtSave);
+            if (mask._projectContext === context && document.getElementById('ce-text').value === text && document.getElementById('ce-title').value.trim() === title) {
+                closeProjectModal('modal-chapter', context);
+            }
+            showToast(append ? '新章已保存' : '本章已更新', 'success');
+            if (await refreshProjectContext(context) && append) {
+                const index = sortedChapters.findIndex(item => item.chapter_number === chapter);
+                if (index >= 0) { switchTab('chapters'); await showChapter(index); }
+            }
+        } else {
+            const err = await res.json().catch(() => ({}));
+            if (res.status === 409 && mask._projectContext === context && mask.classList.contains('open')) {
+                stashChapterDraft();
+                if (!append) document.getElementById('ce-reload').classList.remove('hidden');
+                showToast(append ? '目录已变化。新章未提交，可先下载草稿。' : '正式稿可能已更新。草稿仍在编辑区，可核对最新正式稿。', 'warn');
+            } else showToast(err.detail || '保存失败', 'error');
+        }
+    }
+
+    function chapterVersionsUrl(context, chapter, number) {
+        return `/api/novel/${encodeURIComponent(context.novelId)}/chapter/${chapter}/versions${number ? '/' + number : ''}`;
+    }
+
+    async function openChapterVersions() {
+        const context = modalContext('modal-chapter');
+        const editor = document.getElementById('modal-chapter');
+        const chapter = editor._editorChapter;
+        const response = await fetch(chapterVersionsUrl(context, chapter));
+        const data = await response.json();
+        if (editor._projectContext !== context || !editor.classList.contains('open') || !isCurrentContext(context)) return;
+        if (!response.ok || data.revision !== context.revision) throw new Error(data.detail || '作品已更新，请刷新后重试');
+        const mask = document.getElementById('modal-chapter-versions');
+        mask._chapter = chapter;
+        const source = sortedChapters.find(item => item.chapter_number === chapter);
+        document.getElementById('chapter-version-current').textContent = [source?.title, editor._originalText].join('\n\n');
+        document.getElementById('chapter-version-previous').textContent = '';
+        document.getElementById('chapter-version-list').innerHTML = data.versions.length
+            ? data.versions.map(({number, saved_at}) => `<option value="${number}">版本 ${number} · ${escapeHtml(new Date(saved_at).toLocaleString('zh-CN'))}</option>`).join('')
+            : '<option value="">还没有历史稿</option>';
+        document.getElementById('chapter-version-restore').disabled = true;
+        openModal('modal-chapter-versions');
+        if (data.versions.length) await loadChapterVersion();
+    }
+
+    async function loadChapterVersion() {
+        const id = 'modal-chapter-versions';
+        const context = modalContext(id);
+        const select = document.getElementById('chapter-version-list');
+        const number = select.value;
+        const button = document.getElementById('chapter-version-restore');
+        button.disabled = true;
+        if (!number) return;
+        const response = await fetch(chapterVersionsUrl(context, document.getElementById(id)._chapter, number));
+        const data = await response.json();
+        if (!isCurrentContext(context) || select.value !== number || document.getElementById(id)._projectContext !== context) return;
+        if (!response.ok || data.revision !== context.revision) throw new Error(data.detail || '作品已更新，请刷新后重试');
+        document.getElementById('chapter-version-previous').textContent = [data.version.title, data.version.text].join('\n\n');
+        button.disabled = false;
+    }
+
+    function confirmChapterVersionRestore() {
+        const id = 'modal-chapter-versions';
+        const context = modalContext(id);
+        const number = document.getElementById('chapter-version-list').value;
+        const chapter = document.getElementById(id)._chapter;
+        openConfirm('恢复历史稿', '此版本将成为本章正文，当前已保存的正文会加入历史。涉及人物和伏笔的变化需要重新核对。', '恢复', async () => {
+            const response = await fetch(chapterVersionsUrl(context, chapter, number), {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: revisionBody(context, {}),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || '无法恢复历史稿');
+            closeProjectModal(id, context);
+            const editor = document.getElementById('modal-chapter');
+            if (editor._projectContext?.novelId === context.novelId && editor._editorChapter === chapter) closeModal('modal-chapter');
+            showToast('历史稿已恢复', 'success');
+            await refreshProjectContext(context);
+        });
     }
 
     let confirmFn = null;
@@ -3247,8 +4348,7 @@
                 currentNovelId = ''; novelData = null; selectedChapterIdx = 0; selectedChapterNum = 0;
                 document.getElementById('novel-workspace').classList.add('hidden');
                 document.getElementById('welcome-view').classList.remove('hidden');
-                syncHeroTypewriter();
-            }
+                    }
             loadNovels();
         } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error'); }
     }
@@ -3350,23 +4450,141 @@
         }
     }
 
-    function confirmRegenerate() {
+    function rewriteCandidateUrl(context) {
+        return `/api/novel/${encodeURIComponent(context.novelId)}/rewrite_candidate`;
+    }
+
+    async function confirmRegenerate() {
         if (!currentNovelId || !selectedChapterNum) { showToast('请先选择章节', 'warn'); return; }
         const context = captureProjectContext(), chapter = selectedChapterNum;
-        openConfirm('重写本章', `第 ${chapter} 章将重新生成，当前版本会被覆盖。`, '重写', () => doRegenerate(context, chapter));
+        try {
+            if (await openChapterRewrite(context, chapter)) return;
+            if (!isCurrentContext(context) || selectedChapterNum !== chapter) return;
+            openConfirm('生成整章重写稿', `将根据第 ${chapter} 章细纲生成一份待审阅的重写稿。你可以比较正文后再决定是否采纳。`, '生成重写稿', () => doRegenerate(context, chapter));
+        } catch (error) { showToast(error.message, 'error'); }
     }
 
     async function doRegenerate(context, chapter) {
         const res = await fetch('/api/novel/regenerate', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: revisionBody(context, { name: context.novelId, chapter })
+            body: revisionBody(context, { name: context.novelId, chapter, preview: true })
         });
-        if (res.ok) {
-            const result = await res.json().catch(() => ({}));
-            showToast('重写任务已启动', 'success');
-            pollStatus(result.task_id);
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(result.detail || '启动失败', 'error'); return; }
+        showToast('正在生成重写稿', 'success');
+        pollStatus(result.task_id);
+    }
+
+    function renderChapterDifference(current, proposal) {
+        const lines = current.split('\n');
+        const replacements = proposal.split('\n');
+        let start = 0, tail = 0;
+        while (start < Math.min(lines.length, replacements.length) && lines[start] === replacements[start]) start++;
+        while (tail < Math.min(lines.length, replacements.length) - start
+            && lines[lines.length - tail - 1] === replacements[replacements.length - tail - 1]) tail++;
+        const render = items => items.map((line, index) =>
+            index >= start && index < items.length - tail && line
+                ? `<mark>${escapeHtml(line)}</mark>` : escapeHtml(line)
+        ).join('\n');
+        document.getElementById('rewrite-before').innerHTML = render(lines);
+        document.getElementById('rewrite-after').innerHTML = render(replacements);
+    }
+
+    async function reviewAvailableRewrite() {
+        const context = captureProjectContext();
+        const number = novelData.rewrite_candidate_chapter;
+        const index = sortedChapters.findIndex(chapter => chapter.chapter_number === number);
+        if (index < 0) return;
+        if (selectedChapterNum !== number) await showChapter(index);
+        if (isCurrentContext(context) && !await openChapterRewrite(context, number)) {
+            showToast('重写稿已不存在，请重新生成', 'warn');
+            await refreshProjectContext(context);
         }
-        else { const err = await res.json().catch(() => ({})); showToast(err.detail || '启动失败', 'error'); }
+    }
+
+    async function openChapterRewrite(context, number) {
+        const res = await fetch(rewriteCandidateUrl(context));
+        if (!res.ok) throw new Error('无法读取重写稿，请重试');
+        const { candidate, warning } = await res.json();
+        if (!isCurrentContext(context) || selectedChapterNum !== number) return false;
+        if (warning) showToast(warning, 'warn');
+        if (!candidate || candidate.chapter !== number) return false;
+        const chapter = sortedChapters[selectedChapterIdx];
+        if (typeof chapter?.full_text !== 'string') return false;
+        const current = candidate.revision === context.revision;
+        renderChapterDifference(chapter.full_text, candidate.text);
+        const textDiffers = chapter.full_text !== candidate.text;
+        document.getElementById('chapter-rewrite-meta').textContent =
+            `第 ${number} 章 · ${candidate.title} · ${AUDIT_STATUS_LABELS[candidate.audit_status] || '待审阅'}`
+            + (textDiffers ? '' : ' · 正文相同');
+        document.getElementById('chapter-rewrite-effects').textContent = !current
+            ? '作品已经修改，这份重写稿基于旧版本。请放弃后重新生成。'
+            : candidate.state_extraction_failed
+                ? '采纳后请重新提取本章人物与伏笔状态。'
+                : '采纳后会以重写稿的叙事事件重新计算后续状态，请核对后文。';
+        const effects = candidate.state_effects;
+        if (current && !candidate.state_extraction_failed && effects) {
+            const characters = effects.affected_characters?.join('、') || '无';
+            const items = effects.new_items?.join('、') || '无';
+            document.getElementById('chapter-rewrite-effects').textContent +=
+                ` 候选涉及人物 ${characters}，新增物品 ${items}，埋设 ${effects.new_hooks} 条、回收 ${effects.resolved_hooks} 条伏笔。`;
+        }
+        const changes = candidate.changes || [];
+        document.getElementById('rewrite-changes').classList.toggle('hidden', !current || !changes.length);
+        const overflow = Number(candidate.change_count) > changes.length
+            ? `<p class="t2 text-[12px]">共 ${Number(candidate.change_count)} 处变更，此处可以勾选前 ${changes.length} 处。整章对照显示完整正文。</p>` : '';
+        document.getElementById('rewrite-hunks').innerHTML = current ? overflow + changes.map(({index, before, after}, i) =>
+            `<details class="rewrite-pane mt-2">
+                <summary class="t2">变更 ${i + 1}</summary>
+                <label class="label"><input type="checkbox" data-hunk="${index}" onchange="updateRewriteSelection()"> 采纳此处</label>
+                <div class="rewrite-grid"><div class="rewrite-prose" aria-label="当前段落">${escapeHtml(before || '（新增）')}</div><div class="rewrite-prose" aria-label="候选段落">${escapeHtml(after || '（删除）')}</div></div>
+            </details>`).join('') : '';
+        const partial = document.getElementById('chapter-rewrite-partial');
+        partial.classList.toggle('hidden', !current || !changes.length);
+        partial.disabled = true;
+        document.getElementById('chapter-rewrite-apply').disabled = !current;
+        document.getElementById('modal-chapter-rewrite')._candidate = candidate;
+        openModal('modal-chapter-rewrite');
+        return true;
+    }
+
+    function selectedRewriteHunks() {
+        return Array.from(document.querySelectorAll('#rewrite-hunks input:checked'), input => Number(input.dataset.hunk));
+    }
+
+    function updateRewriteSelection() {
+        document.getElementById('chapter-rewrite-partial').disabled = selectedRewriteHunks().length === 0;
+    }
+
+    async function applySelectedRewrite() {
+        const selected = selectedRewriteHunks();
+        if (selected.length) await applyChapterRewrite(selected);
+    }
+
+    async function applyChapterRewrite(selected = null) {
+        const id = 'modal-chapter-rewrite';
+        const context = modalContext(id);
+        const candidate = document.getElementById(id)._candidate;
+        const res = await fetch(rewriteCandidateUrl(context), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: revisionBody(context, { task_id: candidate.task_id, ...(selected ? {selected_hunks:selected} : {}) }),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(result.detail || '采纳失败');
+        closeProjectModal(id, context);
+        showToast(selected ? '已采纳选中段落。请按提示核对叙事状态。' : '已采纳本章重写稿', 'success');
+        await refreshProjectContext(context);
+    }
+
+    async function discardChapterRewrite() {
+        const id = 'modal-chapter-rewrite';
+        const context = modalContext(id);
+        const candidate = document.getElementById(id)._candidate;
+        const res = await fetch(`${rewriteCandidateUrl(context)}/${encodeURIComponent(candidate.task_id)}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 404) throw new Error('无法放弃重写稿，请重试');
+        closeProjectModal(id, context);
+        showToast('已放弃重写稿', 'success');
+        await refreshProjectContext(context);
     }
 
     let editingOutlineChapter = 0;
@@ -3485,18 +4703,21 @@
         } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '替换失败', 'error'); }
     }
 
-    function downloadProjectExport(format) {
+    function downloadProjectExport(format, boundContext = null) {
         const formats = {
             txt: { route: 'export_txt', extension: 'txt', suffix: '_全本发布稿' },
             markdown: { route: 'export', extension: 'md', suffix: '_全本' },
             epub: { route: 'export_epub', extension: 'epub', suffix: '' },
+            docx: { route: 'export_docx', extension: 'docx', suffix: '_交稿' },
+            chapterBundle: { route: 'export_chapter_bundle', extension: 'zip', suffix: '_分章稿' },
             backup: { route: 'export_backup', extension: 'zip', suffix: '_backup' },
         };
         const target = formats[format];
         if (!target) return;
         let context;
-        try { context = captureProjectContext(); }
+        try { context = boundContext || captureProjectContext(); }
         catch (error) { showToast(error.message, 'warn'); return; }
+        if (!isCurrentContext(context)) return;
         // Native same-origin downloads stream to disk without popup windows or
         // buffering an entire long-book archive in browser JavaScript memory.
         const link = document.createElement('a');
@@ -3508,10 +4729,271 @@
         finally { link.remove(); }
     }
 
+    async function openPublicationPreview() {
+        const context = captureProjectContext();
+        const chapter = selectedChapterNum;
+        if (!chapter) throw new Error('请先打开要预览的章节');
+        const result = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/publication_preview?chapter=${chapter}`);
+        const data = await result.json();
+        if (!isCurrentContext(context) || selectedChapterNum !== chapter) return;
+        if (!result.ok || data.revision !== context.revision) throw new Error(data.detail || '作品已更新，请刷新后重试');
+        document.getElementById('publication-note').textContent = data.has_unreviewed_changes
+            ? '当前版本待人工审阅。以下为分章 TXT 的排版，词语提示请在内容检查中核对。'
+            : '当前版本已由作者确认。以下为分章 TXT 的排版。';
+        document.getElementById('publication-text').textContent = data.text;
+        const rules = document.getElementById('publication-rules');
+        rules.replaceChildren();
+        for (const rule of data.official_rules) {
+            const line = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = rule.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = `${rule.title}（${rule.date}）`;
+            line.appendChild(link);
+            rules.appendChild(line);
+        }
+        openModal('modal-publication');
+    }
+
     function exportEpub() { downloadProjectExport('epub'); }
 
     // ---------- 备份与导入 ----------
     function exportBackup() { downloadProjectExport('backup'); }
+
+    const manuscriptLimits = { bytes: 4 * 1024 * 1024, chapters: 500, chapterLength: 2_000_000 };
+    let manuscriptChapters = [];
+    let manuscriptSelection = 0;
+    let manuscriptFileRequest = 0;
+
+    function openManuscriptImport() {
+        manuscriptFileRequest++;
+        openModal('modal-manuscript');
+    }
+
+    function parseManuscript(text) {
+        const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+        const heading = /^(?:#{1,6}[ \t]+)?((?:第[ \t]*[〇零一二三四五六七八九十百千万两\d０-９]+[ \t]*[章节回](?:[^\n]*)|(?:序章|楔子|尾声|后记)(?:[ \t：:].*)?|Chapter[ \t]+\d+\b.*))$/gim;
+        const headings = [...normalized.matchAll(heading)];
+        if (!headings.length) return [{ title: '开篇', text: normalized.trim() }];
+        const entries = [];
+        const preface = normalized.slice(0, headings[0].index).trim();
+        if (preface) entries.push({ title: '序章', text: preface });
+        for (const [index, match] of headings.entries()) {
+            const end = headings[index + 1]?.index ?? normalized.length;
+            entries.push({
+                title: match[1].trim().replace(/^(?:第[ 	]*[〇零一二三四五六七八九十百千万两\d０-９]+[ 	]*[章节回]|Chapter[ 	]+\d+\b)[ 	：:、.·—-]*/i, '') || '未命名章节',
+                text: normalized.slice(match.index + match[0].length, end).trim(),
+            });
+        }
+        return entries;
+    }
+
+    function parseDocxParagraphs(paragraphs) {
+        paragraphs = paragraphs.filter(item => !item.document_title);
+        const containsNumberedHeadings = paragraphs.some(({ text }) =>
+            /^(?:第[ \t]*[〇零一二三四五六七八九十百千万两\d０-９]+[ \t]*[章节回]|Chapter[ \t]+\d+\b)/i.test(text.trim()));
+        const sections = [];
+        let current = { title: '开篇', lines: [] };
+        for (const {text, heading} of paragraphs) {
+            if (!containsNumberedHeadings && heading && text.trim()) {
+                if (current.lines.some(line => line.trim())) sections.push(current);
+                current = { title: text.trim(), lines: [] };
+            } else current.lines.push(text);
+        }
+        sections.push(current);
+        return containsNumberedHeadings
+            ? parseManuscript(paragraphs.map(item => item.text).join('\n'))
+            : sections.map(({title, lines}) => ({title, text: lines.join('\n').trim()}));
+    }
+
+    async function readManuscriptFile() {
+        const input = document.getElementById('ms-file');
+        const files = Array.from(input.files || []).sort((a, b) => a.name.localeCompare(b.name, 'zh', {numeric: true}));
+        if (!files.length) return;
+        const request = ++manuscriptFileRequest;
+        const maxUpload = 16 * 1024 * 1024;
+        if (files.length > manuscriptLimits.chapters || files.reduce((total, file) => total + file.size, 0) > maxUpload) {
+            throw new Error('一次最多选择 500 个文件，总大小不超过 16 MiB');
+        }
+        const entries = [];
+        let readyBytes = 0;
+        let documentTitle = "";
+        for (const file of files) {
+            const filename = file.name.replace(/\.(?:docx|txt|md|markdown)$/i, '');
+            let chapters;
+            if (/\.docx$/i.test(file.name)) {
+                const response = await fetch('/api/novels/preview_docx', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'},
+                    body: file,
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : '无法读取 DOCX');
+                if (files.length === 1) documentTitle = result.paragraphs.find(item => item.document_title)?.text || "";
+                chapters = parseDocxParagraphs(result.paragraphs);
+            } else {
+                let prose;
+                try { prose = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer()); }
+                catch { throw new Error('无法读取文件，请将 TXT 或 Markdown 转存为 UTF-8 后重试'); }
+                chapters = parseManuscript(prose);
+                if (files.length === 1) document.getElementById('ms-text').value = prose;
+            }
+            if (request !== manuscriptFileRequest || !document.getElementById('modal-manuscript').classList.contains('open')) return;
+            if (chapters.length === 1 && chapters[0].title === '开篇') chapters[0].title = filename.slice(0, 200);
+            readyBytes += new TextEncoder().encode(JSON.stringify(chapters)).length;
+            if (readyBytes > maxUpload - 1024) throw new Error('分章后的存稿超过 16 MiB 导入上限');
+            entries.push(...chapters);
+            if (entries.length > manuscriptLimits.chapters) throw new Error('每次最多导入 500 章');
+        }
+        if (files.length === 1) {
+            const filename = files[0].name.replace(/\.(?:docx|txt|md|markdown)$/i, '');
+            const title = document.getElementById('ms-title');
+            const name = document.getElementById('ms-name');
+            if (!title.value.trim()) title.value = (documentTitle || filename).slice(0, 200);
+            if (!name.value.trim()) name.value = filename.replace(/[^\w\u4e00-\u9fff-]+/g, '-').slice(0, 64);
+        }
+        input.value = '';
+        showManuscriptPreview(entries);
+    }
+
+    function previewManuscript() {
+        const text = document.getElementById('ms-text').value;
+        if (!text.trim()) throw new Error('请选择文件或粘贴正文');
+        if (new TextEncoder().encode(text).length > manuscriptLimits.bytes) throw new Error('存稿须小于 4 MiB');
+        showManuscriptPreview(parseManuscript(text));
+    }
+
+    function showManuscriptPreview(chapters) {
+        if (chapters.length > manuscriptLimits.chapters) throw new Error('每次最多导入 500 章');
+        manuscriptChapters = chapters;
+        manuscriptSelection = 0;
+        document.getElementById('ms-source').classList.add('hidden');
+        document.getElementById('ms-preview-pane').classList.remove('hidden');
+        renderManuscriptPreview();
+        document.getElementById('ms-chapter-select').focus();
+    }
+
+    function renderManuscriptPreview() {
+        const select = document.getElementById('ms-chapter-select');
+        select.innerHTML = manuscriptChapters.map((chapter, index) =>
+            `<option value="${index}">${index + 1}. ${escapeHtml(chapter.title || '未命名章节')}</option>`
+        ).join('');
+        select.value = String(manuscriptSelection);
+        const chapter = manuscriptChapters[manuscriptSelection];
+        document.getElementById('ms-chapter-title').value = chapter.title;
+        document.getElementById('ms-chapter-body').value = chapter.text;
+        document.getElementById('ms-merge').disabled = manuscriptSelection === 0;
+        document.getElementById('ms-up').disabled = manuscriptSelection === 0;
+        document.getElementById('ms-down').disabled = manuscriptSelection === manuscriptChapters.length - 1;
+        document.getElementById('ms-remove').disabled = manuscriptChapters.length < 2;
+        document.getElementById('ms-split').disabled = manuscriptChapters.length >= manuscriptLimits.chapters;
+        updateManuscriptStatus();
+    }
+
+    function removeManuscriptPreviewChapter() {
+        if (manuscriptChapters.length < 2) return;
+        manuscriptChapters.splice(manuscriptSelection, 1);
+        manuscriptSelection = Math.min(manuscriptSelection, manuscriptChapters.length - 1);
+        renderManuscriptPreview();
+        document.getElementById('ms-chapter-select').focus();
+    }
+
+    function moveManuscriptChapter(offset) {
+        const next = manuscriptSelection + offset;
+        if (next < 0 || next >= manuscriptChapters.length) return;
+        [manuscriptChapters[manuscriptSelection], manuscriptChapters[next]] =
+            [manuscriptChapters[next], manuscriptChapters[manuscriptSelection]];
+        manuscriptSelection = next;
+        renderManuscriptPreview();
+        document.getElementById('ms-chapter-select').focus();
+    }
+
+    function chooseManuscriptChapter() {
+        manuscriptSelection = Number(document.getElementById('ms-chapter-select').value);
+        renderManuscriptPreview();
+    }
+
+    function updateManuscriptChapter() {
+        const chapter = manuscriptChapters[manuscriptSelection];
+        chapter.title = document.getElementById('ms-chapter-title').value;
+        chapter.text = document.getElementById('ms-chapter-body').value;
+        document.getElementById('ms-chapter-select').options[manuscriptSelection].textContent =
+            `${manuscriptSelection + 1}. ${chapter.title || '未命名章节'}`;
+        updateManuscriptStatus();
+    }
+
+    function updateManuscriptStatus() {
+        const invalidIndex = manuscriptChapters.findIndex(chapter =>
+            !chapter.title.trim() || chapter.title.trim().length > 200
+            || !chapter.text.trim() || chapter.text.length > manuscriptLimits.chapterLength
+        );
+        document.getElementById('ms-import').disabled = invalidIndex !== -1 || !manuscriptChapters.length;
+        document.getElementById('ms-status').textContent = invalidIndex === -1
+            ? `共 ${manuscriptChapters.length} 章 · 导入只保存正文与目录`
+            : `请检查第 ${invalidIndex + 1} 章的标题与正文长度`;
+    }
+
+    function splitManuscriptChapter() {
+        const body = document.getElementById('ms-chapter-body');
+        const left = body.value.slice(0, body.selectionStart).trimEnd();
+        const right = body.value.slice(body.selectionStart).trimStart();
+        if (!left.trim() || !right.trim()) {
+            showToast('请将光标放在正文中要分章的位置', 'warn');
+            return;
+        }
+        manuscriptChapters[manuscriptSelection].text = left;
+        manuscriptSelection += 1;
+        manuscriptChapters.splice(manuscriptSelection, 0, { title: `第 ${manuscriptSelection + 1} 章`, text: right });
+        renderManuscriptPreview();
+        document.getElementById('ms-chapter-title').focus();
+    }
+
+    function mergeManuscriptChapter() {
+        if (manuscriptSelection < 1) return;
+        const [chapter] = manuscriptChapters.splice(manuscriptSelection, 1);
+        manuscriptSelection -= 1;
+        const previous = manuscriptChapters[manuscriptSelection];
+        previous.text = [previous.text, chapter.title, chapter.text].filter(Boolean).join('\n\n');
+        renderManuscriptPreview();
+        document.getElementById('ms-chapter-body').focus();
+    }
+
+    function returnToManuscriptSource() {
+        manuscriptChapters = [];
+        document.getElementById('ms-preview-pane').classList.add('hidden');
+        document.getElementById('ms-source').classList.remove('hidden');
+        document.getElementById('ms-import').disabled = true;
+        document.getElementById('ms-status').textContent = '';
+        document.getElementById('ms-text').focus();
+    }
+
+    async function submitManuscript() {
+        const title = document.getElementById('ms-title').value.trim();
+        const name = document.getElementById('ms-name').value.trim();
+        if (!title) throw new Error('请填写书名');
+        if (!/^[\w\u4e00-\u9fff-]{1,64}$/.test(name)) throw new Error('请填写 1～64 位项目标识');
+        if (!manuscriptChapters.length) throw new Error('请先预览章节');
+        const mask = document.getElementById('modal-manuscript');
+        const opening = mask._returnFocus;
+        const selection = novelLoadToken;
+        const body = JSON.stringify({ title, name, chapters: manuscriptChapters });
+        if (new TextEncoder().encode(body).length > 16 * 1024 * 1024) throw new Error('存稿超过导入大小上限');
+        const response = await fetch('/api/novels/import_manuscript', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : '无法导入，请检查书名和章节');
+        const stillOpen = mask.classList.contains('open') && mask._returnFocus === opening;
+        if (stillOpen) {
+            returnToManuscriptSource();
+            for (const id of ['ms-title', 'ms-name', 'ms-text']) document.getElementById(id).value = '';
+            closeModal('modal-manuscript');
+        }
+        showToast(`已导入 ${result.chapters} 章`, 'success');
+        await loadNovels();
+        if (stillOpen && selection === novelLoadToken) await selectNovel(result.novel_id);
+    }
 
     async function importBackup(input) {
         const file = input.files && input.files[0];
@@ -3599,10 +5081,63 @@
         } catch (e) { /* 静默 */ }
     }
 
-    function showUsage() {
-        const u = window._usage || {};
-        const total = (u.prompt_tokens || 0) + (u.completion_tokens || 0);
-        showToast(`本次会话累计 ${fmtTokens(total)} tokens（输入 ${fmtTokens(u.prompt_tokens || 0)} / 输出 ${fmtTokens(u.completion_tokens || 0)}，共 ${u.calls || 0} 次调用${u.estimated ? '，估算值' : ''}）`, 'info');
+    async function previewModelUse(operation) {
+        let context, origin;
+        const query = new URLSearchParams({operation});
+        if (operation === 'create') {
+            origin = document.getElementById('modal-create');
+            query.set('count', readBoundedInteger('new-chapters', 1, 20, '首批章节数'));
+            query.set('idea_length', Array.from(document.getElementById('new-idea').value).length);
+            query.set('include_adaptations', document.getElementById('new-adaptations').checked);
+        } else {
+            const id = {continue:'modal-continue', audit:'modal-audit-history', facts:'modal-continuation-plan'}[operation];
+            origin = document.getElementById(id);
+            context = modalContext(id);
+            query.set('novel_id', context.novelId);
+            if (operation === 'continue') {
+                query.set('count', readBoundedInteger('continue-count', 1, 10, '续写章节数'));
+                query.set('include_adaptations', document.getElementById('continue-adaptations').checked);
+            } else if (operation === 'audit') query.set('chapter', origin._auditChapter);
+            else {
+                const {start,end} = readFactRange();
+                query.set('chapter', start);
+                query.set('count', end - start + 1);
+            }
+        }
+        const opening = origin._returnFocus;
+        const response = await fetch('/api/model_preview?' + query.toString());
+        const data = await response.json();
+        if (!origin.classList.contains('open') || origin._returnFocus !== opening ||
+            (context && (!isCurrentContext(context) || context !== origin._projectContext))) return;
+        if (!response.ok || (context && data.revision !== context.revision)) throw new Error(data.detail || '作品已更新，请刷新后重试');
+        document.getElementById('model-usage-heading').textContent = '执行前 · 模型与用量';
+        document.getElementById('model-usage-details').innerHTML = `
+            <p><strong>模型接收方</strong> ${data.offline ? '离线演示 · 本机固定样例' : escapeHtml(data.host || '尚未配置')}${data.configured ? '' : ' · 尚未配置密钥'}</p>
+            <p><strong>模型</strong> ${Object.entries(data.models).map(([role, model]) => escapeHtml(role + ' · ' + model)).join('、')}</p>
+            <p><strong>发送范围</strong> ${escapeHtml(data.scope)}${data.source_chapters.length ? ' · 第 ' + data.source_chapters.map(Number).join('、') + ' 章' : ''}</p>
+            ${data.next_chapters.length ? `<p><strong>待生成</strong> 第 ${Number(data.next_chapters[0])}–${Number(data.next_chapters.at(-1))} 章</p>` : ''}
+            <p><strong>预计用量</strong> ${data.estimated_tokens.map(value => fmtTokens(Number(value))).join('–')} tokens</p>
+            <p>区间为工作量估算，生成分支、重试和供应商分词会改变实际用量。费用按你的模型服务计价。导入、手写、检索、备份和导出在本机执行。</p>`;
+        openModal('modal-model-usage');
+    }
+
+    async function showUsage() {
+        await refreshUsage();
+        const usage = window._usage || {};
+        const total = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+        const tasks = usage.recent_tasks || [];
+        document.getElementById('model-usage-heading').textContent = '本次运行 · 模型用量';
+        document.getElementById('model-usage-details').innerHTML = `
+            <p>累计 ${fmtTokens(total)} tokens，约 ${Number(usage.calls || 0)} 次用量记录${usage.estimated ? '，包含估算' : ''}。</p>
+            ${tasks.length ? tasks.map(task => `<article class="card-flat p-3">
+                <h3 class="font-semibold t1">${escapeHtml(task.label)} · ${escapeHtml(task.project)}</h3>
+                <p>${escapeHtml(new Date(task.recorded_at).toLocaleString('zh-CN'))}</p>
+                <ul>${task.models.map(model => `<li>${escapeHtml(model.model)}：
+                    实测输入 ${fmtTokens(model.reported_prompt)} / 输出 ${fmtTokens(model.reported_completion)}（${Number(model.reported_calls)} 次）
+                    · 估算输入 ${fmtTokens(model.estimated_prompt)} / 输出 ${fmtTokens(model.estimated_completion)}（${Number(model.estimated_calls)} 次）</li>`).join('')}</ul>
+            </article>`).join('') : '<p>暂无可显示的任务用量。</p>'}
+            <p>这里保留本次运行最近 20 个有用量数据的任务，以供应商账单为准。</p>`;
+        openModal('modal-model-usage');
     }
 
     // ---------- 自定义合规词库 ----------
@@ -3759,6 +5294,8 @@
                 { icon: 'fa-file-lines', label: '导出 TXT 发布稿', run: () => exportFullTxt() },
                 { icon: 'fa-file-arrow-down', label: '导出 Markdown', run: () => exportMarkdown() },
                 { icon: 'fa-book', label: '导出 EPUB', run: () => exportEpub() },
+                { icon: 'fa-file-word', label: '导出 DOCX', run: () => downloadProjectExport('docx') },
+                { icon: 'fa-file-zipper', label: '导出分章 TXT', run: () => downloadProjectExport('chapterBundle') },
                 { icon: 'fa-i-cursor', label: '重命名作品', run: () => openRenameModal() },
             );
         }
@@ -3930,7 +5467,7 @@
     }
 
     function paletteKeydown(e) {
-        if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) return;
+        if (isCompositionKey(e) || !['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) return;
         e.preventDefault(); e.stopPropagation();
         if (!paletteItems.length) return;
         if (e.key === 'ArrowDown') { hoverPalette(Math.min(paletteIndex + 1, paletteItems.length - 1)); scrollPaletteActive(); }
@@ -3945,7 +5482,7 @@
 
     // ---------- 全局快捷键 ----------
     document.addEventListener('keydown', e => {
-        if (e.defaultPrevented) return;
+        if (e.defaultPrevented || isCompositionKey(e)) return;
         const paletteOpen = document.getElementById('palette-mask').classList.contains('open');
         if (document.querySelector('.modal-mask.open')) return;
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -4021,6 +5558,26 @@
         void refreshTaskStatus().finally(() => scheduleStatusPoll());
     }
 
+    async function requestGenerationStop() {
+        const button = document.getElementById('pipeline-stop');
+        const taskId = button._taskId;
+        if (!taskId || button.disabled) return;
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/status/${encodeURIComponent(taskId)}/stop`, { method: 'POST' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.detail || '暂时无法停止任务');
+            if (button._taskId !== taskId) return;
+            button.textContent = '正在停止';
+            showToast(data.message || '完成当前策划或章节后停止');
+            pollStatus(taskId);
+        } catch (error) {
+            if (button._taskId !== taskId) return;
+            button.disabled = false;
+            throw error;
+        }
+    }
+
     async function refreshTaskStatus() {
         if (pollInFlight) return;
         pollInFlight = true;
@@ -4034,6 +5591,12 @@
             observedTaskId = status.task_id;
 
             const bar = document.getElementById('pipeline-bar');
+            const stop = document.getElementById('pipeline-stop');
+            stop._taskId = status.is_running && status.can_stop ? status.task_id : '';
+            stop.classList.toggle('hidden', !stop._taskId);
+            stop.disabled = Boolean(status.stop_requested) || stop.classList.contains('loading');
+            stop.textContent = status.stop_requested ? '正在停止' : '停止';
+
             if (status.is_running) {
                 bar.classList.add('show');
                 document.getElementById('pipeline-status-text').innerText = status.current_step || '创作流水线运转中...';
@@ -4052,7 +5615,9 @@
                     if (expectedCompletion) expectedTaskId = '';
                     bar.classList.remove('show');
                     loadNovels();
-                    if (status.current_novel === currentNovelId && selectionToken === novelLoadToken && novelData) refreshProjectContext(captureProjectContext());
+                    if (status.current_novel === currentNovelId && selectionToken === novelLoadToken && novelData) {
+                        refreshProjectContext(captureProjectContext());
+                    }
                     if (status.error || (status.current_step && status.current_step.startsWith('出错'))) showToast(status.current_step || status.error, 'error');
                     else if (status.current_step) showToast(status.current_step, 'success');
                 }
@@ -4064,55 +5629,8 @@
     function exportMarkdown() { downloadProjectExport('markdown'); }
     function exportFullTxt() { downloadProjectExport('txt'); }
 
-    const HERO_LINES = [
-        '矿道深处，硫磺味浓得像化不开的雾。',
-        '灯光扫来的瞬间，他把自己埋进了矿渣堆。',
-        '剑出鞘时，整个藏书阁的器灵都在低语。',
-        '第九道天雷落下的那一刻，他笑了。',
-    ];
-    let heroLine = 0, heroChar = 0, heroDeleting = false, heroTimer = null;
-    function heroShouldRun() {
-        const welcome = document.getElementById('welcome-view');
-        return !document.hidden
-            && welcome && !welcome.classList.contains('hidden')
-            && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    }
-
-    function syncHeroTypewriter() {
-        const el = document.getElementById('hero-typing');
-        if (!el) return;
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches && !el.textContent) {
-            el.textContent = HERO_LINES[0];
-        }
-        if (!heroShouldRun()) {
-            if (heroTimer !== null) clearTimeout(heroTimer);
-            heroTimer = null;
-            return;
-        }
-        if (heroTimer === null) heroTypewriter();
-    }
-
-    function heroTypewriter() {
-        heroTimer = null;
-        if (!heroShouldRun()) return;
-        const el = document.getElementById('hero-typing');
-        if (!el) return;
-        const line = HERO_LINES[heroLine];
-        if (!heroDeleting) {
-            heroChar++;
-            el.textContent = line.slice(0, heroChar);
-            if (heroChar >= line.length) { heroDeleting = true; heroTimer = setTimeout(heroTypewriter, 2600); return; }
-        } else {
-            heroChar -= 2;
-            if (heroChar <= 0) { heroChar = 0; heroDeleting = false; heroLine = (heroLine + 1) % HERO_LINES.length; }
-            el.textContent = line.slice(0, Math.max(0, heroChar));
-        }
-        heroTimer = setTimeout(heroTypewriter, heroDeleting ? 24 : 74);
-    }
-
     document.addEventListener('visibilitychange', () => {
         scheduleStatusPoll();
-        syncHeroTypewriter();
     });
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -4140,7 +5658,21 @@
         const readerRail = document.getElementById('reader-rail');
         readerRail.setAttribute('aria-hidden', 'true');
         readerRail.setAttribute('inert', '');
-        syncHeroTypewriter();
+        const actionMenus = [...document.querySelectorAll('.action-menu')];
+        document.addEventListener('click', e => {
+            for (const menu of actionMenus) {
+                if (menu.open && (!menu.contains(e.target) || e.target.closest('.project-menu > button'))) menu.open = false;
+            }
+        });
+        for (const menu of actionMenus) {
+            menu.addEventListener('keydown', e => {
+                if (e.key !== 'Escape' || !menu.open) return;
+                e.preventDefault();
+                menu.open = false;
+                menu.querySelector('summary').focus();
+            });
+        }
+        new ResizeObserver(revealMobileChapter).observe(document.getElementById('chapters-nav-list'));
         const readerScroller = document.getElementById('reader-scroll');
         if (readerScroller) readerScroller.addEventListener('scroll', updateReaderProgress, { passive: true });
         reloadCustomWords();

@@ -14,6 +14,8 @@ from rich.console import Console
 
 from config.settings import get_output_dir
 from core import character_overrides
+from core.chapter_drafts import read_chapter_rewrite, store_chapter_rewrite
+from core.chapter_versions import preserve_chapter_version
 from core.error_reporting import SafeUserMessage, referenced_failure, report_internal_error
 from core.knowledge_graph import KnowledgeGraph
 from core.multimodal_generator import AudioDramaPackage, ShortDramaScript
@@ -23,11 +25,13 @@ from core.project_ids import is_valid_project_id, require_project_id
 from core.project_transactions import ProjectTransaction, recover_project
 from core.reader_simulator import ReaderSimulationReport
 from core.schemas import (
+    AuditReport,
     ChapterContent,
     ChapterOutline,
     CharacterCard,
     CharacterState,
     CommercialDeliveryPackage,
+    FindingDecision,
     ForeshadowingRecord,
     GlobalOutline,
     HumanChapterReview,
@@ -273,22 +277,32 @@ class StateManager:
 
     @classmethod
     def read_project_chapter_versioned(
-        cls, novel_id: str, chapter_number: int, base_dir: str | None = None,
+        cls, novel_id: str, chapter_number: int, base_dir: str | None = None, *, recover: bool = True,
     ) -> tuple[ChapterContent | None, str]:
         """Read text and its revision under the same short snapshot lock."""
         if chapter_number < 1 or not cls.is_valid_project_id(novel_id):
             return None, ""
         root = (Path(base_dir) if base_dir else get_output_dir()).resolve()
-        recover_project(root, str(novel_id))
+        if recover:
+            recover_project(root, str(novel_id))
         project_dir = (root / str(novel_id)).resolve()
-        if project_dir.parent != root or not (project_dir / "project_state.json").is_file():
+        if project_dir.parent != root:
             return None, ""
         with project_lock(project_dir, scope="snapshot"):
-            chapter_file = project_dir / "chapters" / f"chapter_{chapter_number:03d}.json"
+            aggregate = project_dir / "project_state.json"
+            if not aggregate.is_file():
+                return None, ""
             token = revision_token(project_dir.name, project_version(project_dir))
-            if not chapter_file.is_file():
-                return None, token
-            return ChapterContent.model_validate(read_json(chapter_file)), token
+            chapter_file = project_dir / "chapters" / f"chapter_{chapter_number:03d}.json"
+            if chapter_file.is_file():
+                chapter = ChapterContent.model_validate(read_json(chapter_file))
+            else:
+                # Pre-sharding projects still expose their chapters in the reader.
+                legacy = read_json(aggregate).get("chapters", {}).get(str(chapter_number))
+                chapter = ChapterContent.model_validate(legacy) if legacy is not None else None
+            if chapter is not None and chapter.chapter_number != chapter_number:
+                raise ProjectReadOnlyError("正文章节编号与文件身份不符，请检查作品备份")
+            return chapter, token
 
     def _ensure_directories(self):
         ensure_directory(self.base_dir)
@@ -342,16 +356,25 @@ class StateManager:
         new_text: str,
         *,
         mark_reconciliation: bool = False,
+        title: str | None = None,
     ) -> bool:
         """整章文本人工编辑：重算字数、重建该章语义记忆并导出发布文件"""
         if chapter_number not in self.state.chapters:
             return False
         check_chapter_length(len(new_text))
         chap = self.state.chapters[chapter_number].model_copy(deep=True)
+        text_changed = chap.full_text != new_text
+        if not text_changed and (title is None or chap.title == title):
+            return True
         chap.full_text = new_text
+        if title is not None:
+            chap.title = title
         chap.word_count = len([c for c in new_text if '\u4e00' <= c <= '\u9fff'])
         self.save_chapter(chap)
-        if mark_reconciliation:
+        is_prose_only_manuscript = self.state.imported_manuscript and not (
+            self.state.global_outline or self._timeline_baseline_file.exists()
+        )
+        if text_changed and mark_reconciliation and not is_prose_only_manuscript:
             self.mark_state_reconciliation_required(chapter_number, "chapter text edited without state extraction")
         return True
 
@@ -374,6 +397,13 @@ class StateManager:
         self._set_project_paths(new_id)
         self.state.novel_id = new_id
         self._rewrite_embedded_project_identity(new_id, previous_id=old_id)
+        try:
+            candidate = read_chapter_rewrite(self.base_dir, old_id)
+        except (OSError, ValueError):
+            candidate = None  # Leave unreadable editorial evidence available for backup.
+        if candidate:
+            # It remains compare-only because renaming advances the project revision.
+            store_chapter_rewrite(self.base_dir, candidate.model_copy(update={"novel_id": new_id}))
 
         # 清理旧命名导出物（全本 md / 发布 txt / epub）
         for stale in (new_dir / f"{old_id}_全本.md", new_dir / f"{old_id}.epub",
@@ -493,6 +523,7 @@ class StateManager:
             "volume_number": chapter.volume_number,
             "title": chapter.title,
             "word_count": chapter.word_count,
+            "prose_sha256": chapter.prose_sha256,
             "cliffhanger_ending": chapter.cliffhanger_ending,
             "audit_history": [final_audit.model_dump()] if final_audit else [],
             "final_audit": final_audit.model_dump() if final_audit else None,
@@ -1438,56 +1469,39 @@ class StateManager:
             except Exception as e:
                 warn(state_file, e)
 
-        # New projects keep prose in independent chapter files. Lightweight
-        # callers use tiny metadata shards and fetch one chapter only on demand.
-        legacy_chapters = dict(self.state.chapters)
+        legacy_chapters = self.state.chapters
         chapters: dict[int, ChapterContent] = {}
-        available_metadata_files = sorted(self.chapter_meta_dir.glob("chapter_*.json"), key=self._chapter_file_number)
+        covered_files: set[str] = set()
         if self._load_chapter_content:
             chapters.update(legacy_chapters)
-            for chapter_file in sorted(self.chapters_dir.glob("chapter_*.json"), key=self._chapter_file_number):
-                try:
-                    chapter = ChapterContent.model_validate(read_json(chapter_file))
-                    chapters[chapter.chapter_number] = chapter
-                except Exception as exc:
-                    warn(chapter_file, exc)
         else:
-            if available_metadata_files:
-                for metadata_file in available_metadata_files:
-                    try:
-                        raw_metadata = read_json(metadata_file)
-                        chapter = self._chapter_stub(raw_metadata)
-                        chapters[chapter.chapter_number] = chapter
-                        self.semantic_memory_chunk_count += int(raw_metadata.get("memory_chunk_count", 0))
-                    except Exception as exc:
-                        warn(metadata_file, exc)
-                # A crash or an interrupted old migration may leave only part of
-                # the metadata set. Fill every missing chapter from canonical
-                # content instead of silently hiding it from lightweight views.
-                for number, chapter in legacy_chapters.items():
-                    chapters.setdefault(number, self._chapter_stub(chapter.model_dump(mode="json")))
-                for chapter_file in sorted(self.chapters_dir.glob("chapter_*.json"), key=self._chapter_file_number):
-                    try:
-                        chapter = ChapterContent.model_validate(read_json(chapter_file))
-                        chapters.setdefault(
-                            chapter.chapter_number,
-                            self._chapter_stub(chapter.model_dump(mode="json")),
-                        )
-                    except Exception as exc:
-                        warn(chapter_file, exc)
-            elif legacy_chapters:
-                chapters = {
-                    number: self._chapter_stub(chapter.model_dump(mode="json"))
-                    for number, chapter in legacy_chapters.items()
-                }
-            else:
-                # Compatibility fallback for a partially migrated project.
-                for chapter_file in sorted(self.chapters_dir.glob("chapter_*.json"), key=self._chapter_file_number):
-                    try:
-                        chapter = ChapterContent.model_validate(read_json(chapter_file))
-                        chapters[chapter.chapter_number] = self._chapter_stub(chapter.model_dump(mode="json"))
-                    except Exception as exc:
-                        warn(chapter_file, exc)
+            for metadata_file in sorted(self.chapter_meta_dir.glob("chapter_*.json"), key=self._chapter_file_number):
+                try:
+                    raw_metadata = read_json(metadata_file)
+                    chapter = self._chapter_stub(raw_metadata)
+                    count = raw_metadata.get("memory_chunk_count", 0)
+                    number = self._chapter_file_number(metadata_file)
+                    if chapter.chapter_number != number or type(count) is not int or count < 0:
+                        raise ValueError("章节元数据身份或记忆计数有误")
+                    chapters[number] = chapter
+                    self.semantic_memory_chunk_count += count
+                    covered_files.add(metadata_file.name)
+                except Exception as exc:
+                    warn(metadata_file, exc)
+            for number, chapter in legacy_chapters.items():
+                if number not in chapters:
+                    chapters[number] = self._chapter_stub(chapter.model_dump(mode="json"))
+        for chapter_file in sorted(self.chapters_dir.glob("chapter_*.json"), key=self._chapter_file_number):
+            if chapter_file.name in covered_files:
+                continue
+            try:
+                chapter = ChapterContent.model_validate(read_json(chapter_file))
+                if self._load_chapter_content:
+                    chapters[chapter.chapter_number] = chapter
+                elif chapter.chapter_number not in chapters:
+                    chapters[chapter.chapter_number] = self._chapter_stub(chapter.model_dump(mode="json"))
+            except Exception as exc:
+                warn(chapter_file, exc)
         self.state.chapters = chapters
         self._chapter_metadata_ready = all(
             (self.chapter_meta_dir / f"chapter_{number:03d}.json").is_file()
@@ -1949,6 +1963,38 @@ class StateManager:
         state.current_volume_idx = max(state.current_volume_idx, volume_number)
 
     @project_mutation
+    def append_manual_chapter(self, title: str, text: str) -> ChapterContent:
+        if self.state.pending_initial_planning or self.state.pending_outline_plan:
+            raise ChapterContextError("请先完成作品的策划恢复，再添加章节")
+        number = self.state.current_chapter_idx + 1
+        if number > _MAX_TIMELINE_CHAPTERS:
+            raise ChapterContextError("已达到章节数量上限")
+        volume_number = max(1, self.state.current_volume_idx)
+        within_timeline = self._timeline_baseline_file.exists() or self.state.global_outline is not None
+        if self.state.global_outline:
+            outline = self.state.global_outline
+            if outline.volumes and outline.volumes[0].chapter_range is not None:
+                volume = next(
+                    (item for item in outline.volumes if item.chapter_range.start <= number <= item.chapter_range.end),
+                    None,
+                )
+                if volume is None:
+                    raise ChapterContextError("已达到总纲终章，请调整总纲范围")
+                volume_number = volume.volume_number
+            elif found := self.get_chapter_outline(number):
+                volume_number = found[0].volume_number
+        if within_timeline:
+            self._ensure_timeline_baseline()
+        chapter = ChapterContent(
+            chapter_number=number, volume_number=volume_number, title=title, full_text=text,
+            word_count=sum("\u4e00" <= char <= "\u9fff" for char in text),
+        )
+        self.save_chapter(chapter)
+        if within_timeline:
+            self.mark_state_reconciliation_required(number, "作者新增正文，章节状态待提取")
+        return chapter
+
+    @project_mutation
     def save_chapter(self, chapter: ChapterContent, delta: StateUpdateDelta | None = None):
         check_chapter_length(len(chapter.full_text))
         previous_chapter = self.state.chapters.get(chapter.chapter_number)
@@ -1961,12 +2007,18 @@ class StateManager:
             for field in ("title", "full_text", "word_count", "cliffhanger_ending")
         )
         if previous_chapter is not None and previous_chapter is not chapter:
+            if (previous_chapter.title, previous_chapter.full_text) != (chapter.title, chapter.full_text):
+                preserve_chapter_version(
+                    self.base_dir, chapter.chapter_number, previous_chapter.title, previous_chapter.full_text,
+                )
             chapter.audit_history = self._merge_model_history(
                 previous_chapter.audit_history, chapter.audit_history,
             )
+            chapter.finding_decisions = {**previous_chapter.finding_decisions, **chapter.finding_decisions}
             chapter.human_review_history = self._merge_model_history(
                 previous_chapter.human_review_history, chapter.human_review_history,
             )
+        chapter.prose_sha256 = hashlib.sha256(chapter.full_text.encode("utf-8")).hexdigest()
         chapter.refresh_final_audit()
         chapter.refresh_human_review()
         previous_current = self.state.current_chapter_idx
@@ -2046,6 +2098,41 @@ class StateManager:
             self._invalidate_delivery_package()
         self._refresh_exports_after_chapter(chapter)
         self.save_state()
+
+    def record_machine_audit(self, chapter_number: int, report: AuditReport) -> None:
+        with self.mutation(require_full=False):
+            chapter = self.state.chapters[chapter_number]
+            if report.text_sha256 != hashlib.sha256(chapter.full_text.encode("utf-8")).hexdigest():
+                raise ProjectConflictError("正文版本已变动，请重新审稿")
+            chapter.audit_history = self._merge_model_history(chapter.audit_history, [report])
+            chapter.refresh_final_audit()
+            self._persist_chapter_record(chapter)
+            self._save_chapter_metadata(chapter)
+
+    def record_finding_decision(self, chapter_number: int, evidence_id: str, decision: str, note: str) -> ChapterContent:
+        with project_lock(self.base_dir, timeout=0):
+            self.assert_writable_current(require_full=False)
+            chapter = self.state.chapters.get(chapter_number)
+            report = chapter.final_audit if chapter else None
+            finding = next((item for item in report.findings if item.evidence_id == evidence_id), None) if report else None
+            if finding is None:
+                raise ProjectConflictError("该审稿提示已过期，请重新打开本章审稿")
+            source = self.state.chapters.get(finding.source_chapter)
+            if not source or finding.source_quote not in source.full_text or (
+                finding.source_sha256 and finding.source_sha256 != source.prose_sha256
+            ):
+                raise ProjectConflictError("引用版本已变动，请复查后再标记")
+            with self.mutation(require_full=False):
+                if decision == "reopen":
+                    chapter.finding_decisions.pop(evidence_id, None)
+                else:
+                    chapter.finding_decisions[evidence_id] = FindingDecision(
+                        decision=decision, note=note, decided_at=datetime.now(UTC),
+                    )
+                    while len(chapter.finding_decisions) > 200:
+                        chapter.finding_decisions.pop(next(iter(chapter.finding_decisions)))
+                self._persist_chapter_record(chapter)
+            return chapter
 
     def record_human_review(
         self,
@@ -2165,6 +2252,17 @@ class StateManager:
                     "不会使用后续章节状态替代。旧项目可继续手动编辑正文。"
                 ) from exc
 
+    def chapter_audit_passages(self, chapter_number: int, memories: list[MemoryChunk]) -> list[dict]:
+        passages = []
+        for number in range(max(1, chapter_number - 2), chapter_number):
+            chapter = self.state.chapters.get(number)
+            if chapter and chapter.full_text:
+                passages.append({"chapter": number, "text": chapter.full_text[-900:]})
+        for memory in memories:
+            text = memory.content.partition("】：")[2] or memory.content
+            passages.append({"chapter": memory.chapter_number, "text": text[:900]})
+        return passages
+
     def build_chapter_context(self, chapter_num: int) -> dict[str, Any]:
         historical_state, historical_graph = self.state_before_chapter(chapter_num)
         vol_info, chap_info = self.get_chapter_outline(chapter_num) or (None, None)
@@ -2236,6 +2334,17 @@ class StateManager:
             current_chapter=chapter_num,
         )
         long_term_memory_texts = [m.content for m in long_term_memories]
+        audit_passages = self.chapter_audit_passages(chapter_num, long_term_memories)
+
+        world_rules = list(self.state.world_setting.special_rules) if self.state.world_setting else []
+        continuity = self.state.manuscript_continuity
+        if continuity:
+            if continuity.background and chapter_num >= continuity.from_chapter:
+                world_rules.append(continuity.background)
+            for fact in continuity.facts:
+                source = self.state.chapters.get(fact.source_chapter)
+                if fact.source_chapter < chapter_num and source and fact.quote in source.full_text:
+                    world_rules.append(f"作者确认（第 {fact.source_chapter} 章）· {fact.subject}：{fact.fact}")
 
         return deepcopy({
             "state_as_of_chapter": chapter_num - 1,
@@ -2243,7 +2352,7 @@ class StateManager:
             "genre": self.state.concept.genre if self.state.concept else "",
             "golden_finger": self.state.concept.golden_finger if self.state.concept else "",
             "world_name": self.state.world_setting.world_name if self.state.world_setting else "",
-            "special_rules": self.state.world_setting.special_rules if self.state.world_setting else [],
+            "special_rules": world_rules,
             "power_levels_summary": power_levels_summary,
             "volume_title": vol_info.volume_title if vol_info else f"第{historical_state.current_volume_idx}卷",
             "volume_number": vol_info.volume_number if vol_info else historical_state.current_volume_idx,
@@ -2256,6 +2365,7 @@ class StateManager:
             "expectation_hook": chap_info.expectation_hook if chap_info else "",
             "recent_summaries": historical_state.recent_chapter_summaries,
             "long_term_memories": long_term_memory_texts,
+            "audit_passages": audit_passages,
             "characters_status": active_characters_info,
             "active_foreshadowings": active_hooks,
             "pacing_beat": pacing_beat.model_dump() if pacing_beat else None,

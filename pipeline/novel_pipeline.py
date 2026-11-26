@@ -17,6 +17,8 @@ from agents.state_updater import StateUpdaterAgent
 from agents.stylist_polisher import StylistPolisherAgent
 from config.author_styles import AUTHOR_STYLE_PRESETS
 from config.settings import get_settings
+from core.audit_evidence import MAX_PASSAGES, retrieve_audit_evidence
+from core.chapter_drafts import ChapterDraft
 from core.error_reporting import (
     SafeUserMessage,
     UserInputError,
@@ -45,7 +47,7 @@ from core.schemas import (
     NovelConcept,
     StateUpdateDelta,
 )
-from core.state_manager import StateManager
+from core.state_manager import ChapterContextError, StateManager
 from core.storage import append_text_durable, project_lock
 
 console = Console()
@@ -75,6 +77,8 @@ def project_operation(method: Callable[P, R]) -> Callable[P, R]:
 
 class NovelPipeline:
     """全自动网文小说多 Agent 生产流水线调度引擎（白金全能终极版）"""
+
+    include_adaptations: bool = True
 
     def __init__(
         self,
@@ -342,18 +346,19 @@ class NovelPipeline:
                 message + "请重新加载后使用 resume-plan，或在网页选择继续生成以重试未完成阶段。"
             ) from exc
 
-        # Step 3: 初始化有声书角色音色分配表
-        try:
-            with console.status("[bold cyan]正在为全书角色分配专属有声书演播音色与音效指导..."):
-                self._generate_audio_drama_package()
-        except Exception as exc:
-            # 衍生内容不能让已经完成的策划案和总纲整体失败。
-            message = self._diagnose_failure(
-                exc,
-                scope="audio_drama_package",
-                message="有声演播配置生成失败，不影响主线初始化",
-            )
-            console.print(f"[yellow]⚠️ {message}[/yellow]")
+        if self.include_adaptations:
+            # Step 3: 初始化有声书角色音色分配表
+            try:
+                with console.status("[bold cyan]正在为全书角色分配专属有声书演播音色与音效指导..."):
+                    self._generate_audio_drama_package()
+            except Exception as exc:
+                # 衍生内容不能让已经完成的策划案和总纲整体失败。
+                message = self._diagnose_failure(
+                    exc,
+                    scope="audio_drama_package",
+                    message="有声演播配置生成失败，不影响主线初始化",
+                )
+                console.print(f"[yellow]⚠️ {message}[/yellow]")
 
         console.print(f"[bold green]✔ 全书总纲规划完成！已规划 {len(global_outline.volumes)} 卷大纲[/bold green]")
         return state.concept
@@ -473,19 +478,36 @@ class NovelPipeline:
 
     def _audit_text(
         self, text: str, context: dict[str, Any], *,
-        stage: Literal["draft", "polished"], attempt: int,
+        stage: Literal["draft", "polished", "manual"], attempt: int,
     ) -> AuditReport:
         """Attach local provenance, ignoring identity fields returned by a model."""
+        state = self.state_manager.state
+        chapter_number = context["chapter_number"]
+        evidence = retrieve_audit_evidence(state.chapters, chapter_number, text, continuity=state.manuscript_continuity)
+        passages = evidence.passages
+        if stage != "manual":
+            # Keep outline-derived memory as a fallback, but never offer text
+            # that cannot be found verbatim in the current earlier chapter.
+            for passage in context.get("audit_passages", []):
+                if len(passages) >= MAX_PASSAGES:
+                    break
+                number, excerpt = passage["chapter"], passage["text"]
+                source = state.chapters.get(number)
+                if not (1 <= number < chapter_number and excerpt and source and excerpt in source.full_text):
+                    continue
+                if not any(p["chapter"] == number and (excerpt in p["text"] or p["text"] in excerpt) for p in passages):
+                    passages.append(passage)
+        audit_context = {**context, "audit_passages": passages}
         service_error = False
         try:
             report = self.consistency_auditor.audit_chapter(
-                chapter_number=context["chapter_number"],
+                chapter_number=chapter_number,
                 chapter_title=context["chapter_title"],
                 chapter_text=text,
                 world_rules=context.get("special_rules", []),
                 characters_state=context.get("characters_status", []),
                 main_conflict=context.get("main_conflict", ""),
-                chapter_context=context,
+                chapter_context=audit_context,
             )
         except Exception as exc:
             service_error = True
@@ -501,18 +523,79 @@ class NovelPipeline:
                 critique="自动质检未完成，发布前需要人工复核。",
             )
             console.print(f"[yellow]⚠️ {message}[/yellow]")
+        findings = {}
+        for finding in report.findings:
+            chapter = state.chapters.get(finding.source_chapter)
+            if (
+                not 1 <= finding.source_chapter < chapter_number
+                or finding.draft_quote not in text
+                or chapter is None or finding.source_quote not in chapter.full_text
+                or not any(p["chapter"] == finding.source_chapter and finding.source_quote in p["text"] for p in passages)
+            ):
+                continue
+            findings[finding.evidence_id] = finding.model_copy(update={"source_sha256": chapter.prose_sha256})
         return report.model_copy(update={
+            "findings": list(findings.values()),
+            "evidence_chapters": sorted({p["chapter"] for p in passages}),
+            "searched_chapters": evidence.coverage.searched_chapters,
+            "retrieval_coverage": evidence.coverage,
             "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
             "stage": stage, "attempt": attempt, "service_error": service_error,
         })
+
+    @project_operation
+    def audit_saved_chapter(self, chapter_number: int) -> AuditReport:
+        """Review an author's chapter without altering prose or story state."""
+        manager = self.state_manager
+        chapter = manager.state.chapters.get(chapter_number)
+        if chapter is None or not chapter.full_text.strip():
+            raise UserInputError("请先保存需要审稿的章节")
+        try:
+            context = manager.build_chapter_context(chapter_number)
+        except ChapterContextError:
+            # Unplanned manuscripts still carry reliable source prose.
+            context = {"chapter_number": chapter_number, "chapter_title": chapter.title}
+        audit = self._audit_text(chapter.full_text, context, stage="manual", attempt=1)
+        manager.record_machine_audit(chapter_number, audit)
+        return audit
 
     @project_operation
     def generate_single_chapter(
         self,
         chapter_number: int,
         max_audit_retries: int | None = None,
+        *,
+        adapt: bool = True,
     ) -> ChapterContent:
-        """全自动生成单个章节（图谱子图注入、长程记忆召回、按情绪节拍扩写、质检重审、润色去AI味、状态与图谱入库、短剧分镜转化、读者心智仿真）"""
+        draft = self._prepare_chapter(chapter_number, max_audit_retries, extend_outline=True)
+        self.commit_chapter_draft(draft)
+        if adapt and self.include_adaptations:
+            try:
+                self._generate_short_drama_script(chapter_number)
+            except Exception as exc:
+                message = self._diagnose_failure(
+                    exc,
+                    scope="short_drama",
+                    message="短剧分镜转化失败，不影响正文入库",
+                    context={"chapter": chapter_number},
+                )
+                console.print(f"[yellow]⚠️ {message}[/yellow]")
+        return draft.content
+
+    @project_operation
+    def prepare_chapter_rewrite(self, chapter_number: int) -> ChapterDraft:
+        """Build a replacement from the saved outline without mutating project files."""
+        if chapter_number not in self.state_manager.state.chapters:
+            raise UserInputError("请先选择已有章节")
+        return self._prepare_chapter(chapter_number, None, extend_outline=False)
+
+    def _prepare_chapter(
+        self,
+        chapter_number: int,
+        max_audit_retries: int | None,
+        *,
+        extend_outline: bool,
+    ) -> ChapterDraft:
         if type(chapter_number) is not int or not 1 <= chapter_number <= 1_000_000:
             raise UserInputError("章节序号必须为 1 到 1000000 的整数")
         if chapter_number > self.state_manager.state.current_chapter_idx + 1:
@@ -525,6 +608,8 @@ class NovelPipeline:
         # Check the historical boundary before any paid planner/writer call.
         self.state_manager.state_before_chapter(chapter_number)
         if not self.state_manager.get_chapter_outline(chapter_number):
+            if not extend_outline:
+                raise UserInputError("本章暂无细纲，请先准备细纲再生成重写稿")
             console.print(f"[cyan]🧭 第 {chapter_number} 章尚无细纲，正在滚动扩展后续 10 章规划...[/cyan]")
             self.extend_outline_to(chapter_number)
 
@@ -663,7 +748,7 @@ class NovelPipeline:
             message = self._diagnose_failure(
                 exc,
                 scope="state_extraction",
-                message="状态抽取失败，正文正常入库并已标记待补录",
+                message="状态抽取失败，采纳正文后需要重新提取状态",
                 context={"chapter": chapter_number},
             )
             console.print(f"[yellow]⚠️ {message}[/yellow]")
@@ -680,30 +765,21 @@ class NovelPipeline:
             audit_history=audit_history,
         )
 
-        # Body and incomplete-state marker must commit together; a crash between
-        # separate saves must not make an unextracted chapter look reconciled.
+        return ChapterDraft(
+            content=chapter_content, state_delta=delta, state_extraction_failed=state_extraction_failed,
+        )
+
+    def commit_chapter_draft(self, draft: ChapterDraft) -> None:
+        """Publish prose and its matching state event in one transaction."""
+        chapter = draft.content
         with self.state_manager.mutation():
-            self.state_manager.save_chapter(chapter_content, delta)
-            if state_extraction_failed:
+            self.state_manager.save_chapter(chapter, draft.state_delta)
+            if draft.state_extraction_failed:
                 self.state_manager.mark_state_reconciliation_required(
-                    chapter_number,
+                    chapter.chapter_number,
                     "state extraction failed and requires regeneration or manual reconciliation",
                 )
-
-        # 8. 自动转换为竖屏短剧分镜头剧本（衍生功能，失败不阻断主线但必须留痕）
-        try:
-            self._generate_short_drama_script(chapter_number)
-        except Exception as exc:
-            message = self._diagnose_failure(
-                exc,
-                scope="short_drama",
-                message="短剧分镜转化失败，不影响正文入库",
-                context={"chapter": chapter_number},
-            )
-            console.print(f"[yellow]⚠️ {message}[/yellow]")
-
-        console.print(f"[bold green]🎉 第 {chapter_number} 章 《{chap_title}》 生产完成！字数: {chinese_char_count} 字[/bold green]")
-        return chapter_content
+        console.print(f"[bold green]🎉 第 {chapter.chapter_number} 章 《{chapter.title}》 已保存。[/bold green]")
 
     @project_operation
     def reconcile_existing_chapter_state(self, chapter_number: int) -> StateUpdateDelta:

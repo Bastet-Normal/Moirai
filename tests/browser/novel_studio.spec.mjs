@@ -49,7 +49,7 @@ test('loads the offline library with security headers and named workspace landma
     await expect.poll(() => page.locator('.topbar-brand-text').innerText()).toBe('Moirai');
 
     await expect.poll(() => page.getByRole('complementary', { name: '作品库', exact: true }).isVisible()).toBe(true);
-    await expect.poll(() => page.getByRole('heading', { name: /让 AI 像白金作家团队/ }).isVisible()).toBe(true);
+    await expect.poll(() => page.getByRole('heading', { name: /你的长篇小说.*创作工作台/ }).isVisible()).toBe(true);
     await expect.poll(() => page.getByRole('button', { name: /^打开作品：/ }).count()).toBe(2);
 
     await openDemoNovel(page);
@@ -111,12 +111,32 @@ test('keeps the workspace inside four supported viewport widths', async ({ safar
 test('keyboard tab navigation changes tools without changing chapters', async ({ safariPage: page }) => {
     await page.setViewportSize({ width: 768, height: 844 });
     await openDemoNovel(page);
-    const readerTab = page.getByRole('tab', { name: '沉浸阅读', exact: true });
+    const readerTab = page.getByRole('tab', { name: '章节', exact: true });
     const graphTab = page.getByRole('tab', { name: '实体图谱', exact: true });
     await readerTab.focus();
     await readerTab.press('ArrowRight');
     await expect.poll(() => graphTab.getAttribute('aria-selected')).toBe('true');
     await expect.poll(() => page.locator('#current-chapter-title').innerText()).toBe('第 1 章 旅程 1');
+});
+
+test('reviews cross-chapter evidence without leaving the current chapter or dropping notes', async ({ safariPage: page }) => {
+    await page.goto('/');
+    const shelf = page.getByRole('button', { name:'书架', exact:true });
+    if (await shelf.isVisible()) await shelf.click();
+    await page.getByRole('button', { name:'打开作品：群星航路', exact:true }).click();
+    await page.locator('#chapters-nav-list').getByRole('button', { name:/第2章 旅程 2/ }).click();
+    await expect.poll(() => page.locator('#btn-audit-history').enabled()).toBe(true);
+    const previous = (await (await page.request.get('/api/status')).json()).task_id;
+    await page.locator('#btn-audit-history').click();
+    await page.getByRole('button', { name:'自动审稿', exact:true }).click();
+    await waitForNewCompletedTask(page, previous, 'demo_beta', '本章审稿完成');
+    await page.locator('#btn-audit-history').click();
+    await expect.poll(() => page.locator('#audit-coverage').textContent()).toContain('这不是全书通过');
+    await page.locator('#human-review-note').fill('本次意见只属于第二章。');
+    await page.getByRole('button', { name:'查看引用', exact:true }).click();
+    await expect.poll(() => page.locator('#audit-source-text').textContent()).toContain('玻璃匣');
+    expect(await page.locator('#current-chapter-title').textContent()).toContain('第 2 章');
+    expect(await page.locator('#human-review-note').evaluate(field => field.value)).toBe('本次意见只属于第二章。');
 });
 
 test('searches lazy chapter prose and jumps without changing the project revision', async ({ safariPage: page }) => {
@@ -153,7 +173,8 @@ test('exports a locked prose snapshot without changing the workspace revision', 
     await openDemoNovel(page);
     const before = await (await page.request.get('/api/novel/demo_alpha')).json();
     const collectDownload = await watchDownload(page, '.txt');
-    await page.getByRole('button', { name: 'TXT', exact: true }).click();
+    await page.locator('#project-tools summary').click();
+    await page.getByRole('button', { name: '导出 TXT', exact: true }).click();
     const download = await collectDownload();
     expect(download.name).toBe('demo_alpha_全本发布稿.txt');
     expect((await download.read()).length).toBeGreaterThan(0);
@@ -189,6 +210,7 @@ test('round-trips a real backup through deletion, import, rollback and trash res
     const originalBody = await page.locator('#current-chapter-body').innerText();
 
     const collectDownload = await watchDownload(page, '.zip');
+    await page.locator('#project-tools summary').click();
     await page.getByRole('button', { name: '备份项目', exact: true }).click();
     const backup = await collectDownload();
     expect(backup.name).toBe('demo_alpha_backup.zip');
@@ -217,7 +239,8 @@ test('round-trips a real backup through deletion, import, rollback and trash res
     await expect.poll(() => page.getByRole('article', { name: '第 1 章 旅程 1', exact: true }).isVisible()).toBe(true);
     await expect.poll(() => page.locator('#current-chapter-body').innerText()).toBe(originalBody);
 
-    await page.getByRole('button', { name: '时光机回滚', exact: true }).click();
+    await page.locator('#project-tools summary').click();
+    await page.getByRole('button', { name: '章节回滚', exact: true }).click();
     const rollback = page.locator('#modal-rollback');
     await expect.poll(() => rollback.getAttribute('class')).toMatch(/open/);
     const target = page.locator('#rollback-target');
@@ -277,9 +300,10 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     await page.getByLabel('项目标识名', { exact: true }).fill(projectId);
     await page.getByLabel('核心创意与金手指运作机制', { exact: true })
         .fill('守夜人在断电星港收到一封来自失踪航路的纸质来信。');
-    await page.getByLabel('首批全自动生成章节数', { exact: true }).fill('1');
+    await page.getByLabel('首批草稿章节数', { exact: true }).fill('1');
     await page.getByLabel('全书规划总卷数', { exact: true }).fill('1');
-    await create.getByRole('button', { name: '启动全自动生产', exact: true }).click();
+    await create.locator('#new-adaptations').click();
+    await create.getByRole('button', { name: '生成策划与草稿', exact: true }).click();
 
     await expect.poll(() => create.isVisible()).toBe(false);
     await expect.poll(() => page.getByText('生产流水线已启动，可在顶部查看实时进度', { exact: true }).isVisible()).toBe(true);
@@ -318,10 +342,12 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     expect(project.chapters[0].audit_history.at(-1).passed).toBeTruthy();
 
     let previousTaskId = (await (await page.request.get('/api/status')).json()).task_id;
+    await page.locator('#project-tools > summary').click();
     await page.getByRole('button', { name: '批量续写', exact: true }).click();
     const continuation = page.locator('#modal-continue');
     await expect.poll(() => continuation.getAttribute('class')).toMatch(/open/);
     await page.getByLabel('本次续写章节数', { exact: true }).fill('2');
+    await continuation.locator('#continue-adaptations').click();
     await continuation.getByRole('button', { name: '开始续写', exact: true }).click();
     await expect.poll(() => continuation.isVisible()).toBe(false);
     await waitForNewCompletedTask(page, previousTaskId, projectId, '全部生成完成');
@@ -332,9 +358,10 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     await expect.poll(() => page.locator('#delivery-script-box').innerText()).toContain('全港断电后');
     await expect.poll(() => page.locator('#delivery-prompts-box').innerText()).toContain('主封面');
 
-    await page.getByRole('tab', { name: '沉浸阅读', exact: true }).click();
+    await page.getByRole('tab', { name: '章节', exact: true }).click();
     await directory.getByRole('button', { name: /第2章 停电后的第 2 封信/ }).click();
     await expect.poll(() => page.getByRole('article', { name: '第 2 章 停电后的第 2 封信', exact: true }).isVisible()).toBe(true);
+    await page.locator('#chapter-tools summary').click();
     await page.getByRole('button', { name: '推演读者弹幕与留存', exact: true }).click();
     await expect.poll(() => page.locator('#stat-sentiment-summary').innerText()).toContain('离线读者认为');
     await expect.poll(() => page.locator('#retention-pct').innerText()).toBe('92.5%');
@@ -343,7 +370,8 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     await page.getByRole('tab', { name: '分支推演', exact: true }).click();
     await page.getByRole('button', { name: '推演当前章节分支', exact: true }).click();
     await expect.poll(() => page.locator('#branching-results-container').innerText()).toContain('封锁旧观测站');
-    await page.getByRole('tab', { name: '沉浸阅读', exact: true }).click();
+    await page.getByRole('tab', { name: '章节', exact: true }).click();
+    await page.locator('#chapter-tools summary').click();
     await page.getByRole('button', { name: '编辑细纲', exact: true }).click();
     const outline = page.locator('#modal-outline');
     await expect.poll(() => outline.getAttribute('class')).toMatch(/open/);
@@ -356,12 +384,22 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     expect(currentProject.short_dramas['2']).toBeTruthy();
 
     previousTaskId = (await (await page.request.get('/api/status')).json()).task_id;
+    await page.locator('#chapter-tools summary').click();
     await page.getByRole('button', { name: '整章重新生成', exact: true }).click();
     const confirmRewrite = page.locator('#modal-confirm');
     await expect.poll(() => confirmRewrite.getAttribute('class')).toMatch(/open/);
-    await expect.poll(() => confirmRewrite.getByRole('heading', { name: '重写本章', exact: true }).isVisible()).toBe(true);
-    await confirmRewrite.getByRole('button', { name: '重写', exact: true }).click();
-    await waitForNewCompletedTask(page, previousTaskId, projectId, '重写完成');
+    await expect.poll(() => confirmRewrite.getByRole('heading', { name: '生成整章重写稿', exact: true }).isVisible()).toBe(true);
+    await confirmRewrite.getByRole('button', { name: '生成重写稿', exact: true }).click();
+    await waitForNewCompletedTask(page, previousTaskId, projectId, '重写稿待审阅');
+    const reviewButton = page.getByRole('button', { name: '审阅重写稿', exact: true });
+    await expect.poll(() => reviewButton.isVisible()).toBe(true);
+    await reviewButton.click();
+    const review = page.locator('#modal-chapter-rewrite');
+    await expect.poll(() => review.isVisible()).toBe(true);
+    const stagedProject = await (await page.request.get(`/api/novel/${projectId}`)).json();
+    expect(stagedProject.revision).toBe(currentProject.revision);
+    expect(stagedProject.short_dramas['2']).toBeTruthy();
+    await review.getByRole('button', { name: '采纳重写稿', exact: true }).click();
     await expect.poll(() => page.getByRole('article', { name: '第 2 章 重写验证：第二封信', exact: true }).isVisible(), { timeout: 10_000 }).toBe(true);
 
     currentProject = await (await page.request.get(`/api/novel/${projectId}`)).json();

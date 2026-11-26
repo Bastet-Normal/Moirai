@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.error_reporting import SafeUserMessage, bounded_public_text
+from core.model_usage import Usage, usage_rows
 
 
 def _now() -> str:
@@ -30,6 +31,7 @@ class GenerationTaskStatus:
         self._max_logs = max_logs
         self._max_log_chars = max(100, int(max_log_chars))
         self._state: dict[str, Any] = self._idle_state()
+        self._recent_usage: list[dict[str, Any]] = []
 
     @staticmethod
     def _idle_state() -> dict[str, Any]:
@@ -44,9 +46,11 @@ class GenerationTaskStatus:
             "error": "",
             "started_at": "",
             "finished_at": "",
+            "can_stop": False,
+            "stop_requested": False,
         }
 
-    def reserve(self, novel_id: str, *, step: str = "任务已排队") -> str:
+    def reserve(self, novel_id: str, *, step: str = "任务已排队", can_stop: bool = False) -> str:
         """Atomically reserve the worker before a background callback is queued."""
         with self._lock:
             if self._state["is_running"]:
@@ -59,6 +63,7 @@ class GenerationTaskStatus:
                 current_novel=novel_id,
                 current_step=bounded_public_text(step, fallback="任务已排队", maximum=1000),
                 started_at=_now(),
+                can_stop=can_stop,
             )
             return task_id
 
@@ -112,6 +117,21 @@ class GenerationTaskStatus:
                     agent, fallback="", maximum=200,
                 )
 
+    def request_stop(self, task_id: str) -> bool:
+        with self._lock:
+            if (
+                self._state["task_id"] != task_id
+                or not self._state["is_running"] or not self._state["can_stop"]
+            ):
+                return False
+            self._state["stop_requested"] = True
+            return True
+
+    def stop_requested(self, task_id: str) -> bool:
+        with self._lock:
+            self._check_task(task_id)
+            return self._state["stop_requested"]
+
     def finish(
         self,
         *,
@@ -123,6 +143,7 @@ class GenerationTaskStatus:
         with self._lock:
             self._check_task(task_id)
             self._state["is_running"] = False
+            self._state["can_stop"] = False
             self._state["active_agent"] = ""
             self._state["current_step"] = bounded_public_text(step, fallback="任务已结束", maximum=1000)
             self._state["error"] = (
@@ -132,6 +153,20 @@ class GenerationTaskStatus:
             self._state["finished_at"] = _now()
             if progress is not None:
                 self._state["progress"] = max(0, min(100, int(progress)))
+
+    def record_usage(self, task_id: str, project: str, label: str, usage: Usage) -> None:
+        rows = usage_rows(usage)
+        if not rows:
+            return
+        with self._lock:
+            self._recent_usage.insert(0, {
+                "task_id": task_id, "project": project, "label": label, "recorded_at": _now(), "models": rows,
+            })
+            del self._recent_usage[20:]
+
+    def recent_usage(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [{**task, "models": [row.copy() for row in task["models"]]} for task in self._recent_usage]
 
     @property
     def is_running(self) -> bool:

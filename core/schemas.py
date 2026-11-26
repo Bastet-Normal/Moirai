@@ -44,6 +44,22 @@ class FactionSetting(BaseModel):
     key_figures: list[str] = Field(default_factory=list, description="主要代表人物")
 
 
+class ManuscriptFact(BaseModel):
+    kind: Literal["character", "timeline", "foreshadowing", "alias"]
+    subject: str = Field(min_length=1, max_length=100)
+    fact: str = Field(min_length=1, max_length=350)
+    source_chapter: int = Field(strict=True, ge=1, le=1_000_000)
+    quote: str = Field(min_length=4, max_length=250)
+
+
+class ManuscriptContinuity(BaseModel):
+    """Author-approved continuity, separate from model-generated world settings."""
+
+    background: str = Field("", max_length=8_000)
+    from_chapter: int = Field(ge=1, le=1_000_000)
+    facts: list[ManuscriptFact] = Field(default_factory=list, max_length=30)
+
+
 class WorldSetting(BaseModel):
     """世界观设定集"""
     world_name: str = Field(..., description="世界/大陆名称")
@@ -199,6 +215,42 @@ class GlobalOutline(BaseModel):
         return self
 
 
+class AuditFinding(BaseModel):
+    """A consistency concern accompanied by exact quotations from two chapters."""
+
+    issue: str = Field(min_length=1, max_length=300)
+    draft_quote: str = Field(min_length=4, max_length=300)
+    source_chapter: int = Field(strict=True, ge=1, le=1_000_000)
+    source_quote: str = Field(min_length=4, max_length=300)
+    certainty: Literal["contradiction", "needs_review"] = "needs_review"
+    category: Literal["knowledge", "timeline", "location", "ownership", "foreshadowing", "other"] = "other"
+    source_sha256: str = ""
+
+    @computed_field
+    @property
+    def evidence_id(self) -> str:
+        evidence = f"{self.source_chapter}\0{self.source_quote}\0{self.draft_quote}"
+        return hashlib.sha256(evidence.encode("utf-8")).hexdigest()
+
+
+class FindingDecision(BaseModel):
+    decision: Literal["confirmed", "dismissed", "intentional"]
+    note: str = Field("", max_length=1000)
+    decided_at: datetime
+
+
+
+class AuditRetrievalCoverage(BaseModel):
+    """Local scan coverage, not a claim about the model's review coverage."""
+
+    eligible_chapters: int = Field(ge=0)
+    searched_chapters: int = Field(ge=0)
+    fully_searched_chapters: int = Field(ge=0)
+    eligible_chars: int = Field(ge=0)
+    searched_chars: int = Field(ge=0)
+    query_truncated: bool
+
+
 class AuditReport(BaseModel):
     """质检审稿报告"""
     passed: bool = Field(..., description="是否通过质检（若存在致命逻辑错误或严重OOC则为False）")
@@ -209,8 +261,12 @@ class AuditReport(BaseModel):
     cliffhanger_detected: bool = Field(..., description="章末是否包含有效悬念/钩子")
     critique: str = Field(..., description="审稿专家综合点评")
     revision_directives: list[str] = Field(default_factory=list, description="针对不合格项的具体重写指导意见")
+    findings: list[AuditFinding] = Field(default_factory=list, max_length=12)
+    evidence_chapters: list[int] = Field(default_factory=list, max_length=20)
+    searched_chapters: int = Field(0, ge=0)
+    retrieval_coverage: AuditRetrievalCoverage | None = None
     text_sha256: str = Field("", description="由本地流水线绑定的待审正文摘要；旧报告为空")
-    stage: Literal["legacy", "draft", "polished"] = "legacy"
+    stage: Literal["legacy", "draft", "polished", "manual"] = "legacy"
     attempt: int = Field(0, ge=0)
     service_error: bool = False
 
@@ -231,6 +287,8 @@ class ChapterContent(BaseModel):
     word_count: int = Field(0, ge=0, description="正文字数")
     beats_raw_text: list[str] = Field(default_factory=list, description="各节拍扩写原始文本")
     full_text: str = Field(..., description="经过润色合并后的最终正文")
+    prose_sha256: str = ""
+    finding_decisions: dict[str, FindingDecision] = Field(default_factory=dict, max_length=200)
     cliffhanger_ending: str = Field("", description="章末留钩子片段")
     audit_history: list[AuditReport] = Field(default_factory=list, description="本章质检记录")
     final_audit: AuditReport | None = Field(default=None, description="与当前正文逐字匹配的质检报告")
@@ -253,6 +311,7 @@ class ChapterContent(BaseModel):
     def verify_audit_identity(self, info: ValidationInfo) -> "ChapterContent":
         # Only the internal read-only metadata view lacks a body to verify.
         if not (info.context and info.context.get("metadata_only")):
+            self.prose_sha256 = hashlib.sha256(self.full_text.encode("utf-8")).hexdigest()
             self.refresh_final_audit()
             self.refresh_human_review()
         return self
@@ -387,9 +446,11 @@ class NovelProjectState(BaseModel):
     novel_id: str
     concept: NovelConcept | None = None
     world_setting: WorldSetting | None = None
+    manuscript_continuity: ManuscriptContinuity | None = None
     global_outline: GlobalOutline | None = None
     pending_initial_planning: InitialPlanningCheckpoint | None = None
     pending_outline_plan: InitialOutlinePlan | None = None
+    imported_manuscript: bool = False
     characters: dict[str, CharacterCard] = Field(default_factory=dict)
     foreshadowings: dict[str, ForeshadowingRecord] = Field(default_factory=dict)
     chapters: dict[int, ChapterContent] = Field(default_factory=dict)

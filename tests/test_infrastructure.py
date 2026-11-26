@@ -278,6 +278,32 @@ class TestLightweightShardFallback(unittest.TestCase):
             self.assertEqual(light.load_warnings, [])
 
 
+def test_lightweight_load_only_reads_prose_for_missing_metadata(tmp_path):
+    manager = StateManager("lightweight", base_dir=str(tmp_path))
+    for number in range(1, 4):
+        manager.append_manual_chapter(f"第{number}章", f"正文{number}")
+    (manager.chapter_meta_dir / "chapter_002.json").unlink()
+    with patch("core.state_manager.read_json", wraps=read_json) as reads:
+        loaded = StateManager("lightweight", base_dir=str(tmp_path), load_chapter_content=False, load_memory=False)
+    body_reads = [
+        call.args[0].name for call in reads.call_args_list if call.args[0].parent == manager.chapters_dir
+    ]
+    assert body_reads == ["chapter_002.json"]
+    assert list(sorted(loaded.state.chapters)) == [1, 2, 3]
+    assert not loaded.load_warnings
+
+
+def test_on_demand_reader_supports_legacy_aggregate(tmp_path):
+    root = tmp_path / "legacy"
+    root.mkdir()
+    chapter = ChapterContent(chapter_number=1, volume_number=1, title="旧稿", full_text="原稿正文。")
+    aggregate = NovelProjectState(novel_id="legacy", chapters={1: chapter}, current_chapter_idx=1)
+    (root / "project_state.json").write_text(aggregate.model_dump_json(), encoding="utf-8")
+    loaded, revision = StateManager.read_project_chapter_versioned("legacy", 1, str(tmp_path))
+    assert loaded == chapter
+    assert revision == StateManager("legacy", base_dir=str(tmp_path)).revision
+
+
 class TestSnapshotV3(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

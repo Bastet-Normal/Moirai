@@ -1,12 +1,14 @@
+import argparse
 import logging
 import threading
 import zipfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import uvicorn
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -17,17 +19,24 @@ from api.downloads import build_download
 from api.request_limits import BACKUP_REQUEST_BODY, RequestLimitsMiddleware, backup_upload
 from api.schemas import (
     AdoptBranchRequest,
+    AppendChapterRequest,
     BranchSimRequest,
+    ChapterRewriteRequest,
     ChapterTextRequest,
     CharacterUpdateRequest,
     ComplianceReplaceRequest,
     ConceptUpdateRequest,
     ConfigRequest,
+    ContinuationBoundaryRequest,
+    ContinuationPlanRequest,
     CreateNovelRequest,
     CustomWordsRequest,
+    FindingDecisionRequest,
     GenerateChaptersRequest,
     HistoryRepairRequest,
     HumanReviewRequest,
+    ImportManuscriptRequest,
+    ManuscriptFactsRequest,
     OutlineUpdateRequest,
     ParaRewriteApplyRequest,
     ParaRewriteRequest,
@@ -41,17 +50,30 @@ from api.schemas import (
 from config.compliance_words import (
     COMPLIANCE_CATEGORIES,
     ComplianceWordsError,
+    compliance_terms,
     get_custom_words,
     save_custom_words,
     scan_text,
 )
 from config.settings import BASE_DIR, get_output_dir, get_settings
+from core.audit_evidence import retrieve_audit_evidence
+from core.chapter_drafts import REWRITE_FILENAME, apply_chapter_hunks, chapter_diff, read_chapter_rewrite
+from core.chapter_versions import list_chapter_versions, load_chapter_version
 from core.error_reporting import SafeUserMessage, report_internal_error, safe_user_message
 from core.llm import get_llm_client
+from core.manuscript_docx import DOCX_MEDIA_TYPE, InvalidManuscriptDocument, export_docx, read_docx
+from core.manuscript_facts import (
+    MAX_SOURCE_CHAPTERS,
+    ManuscriptFacts,
+    alias_pair,
+    manuscript_samples,
+    verify_sampled_facts,
+)
+from core.model_usage import collect_model_usage, usage_rows
 from core.project_archive import InvalidProjectArchive, import_project_archive
-from core.project_export import export_epub, export_markdown, export_platform_text
+from core.project_export import export_epub, export_markdown, export_platform_chapter, export_platform_text
 from core.project_search import search_project
-from core.project_transactions import inspect_recovery_journals, recover_all_projects_detailed
+from core.project_transactions import inspect_recovery_journals, recover_all_projects_detailed, recover_project
 from core.project_trash import (
     InvalidTrashEntryError,
     TrashEntryNotFoundError,
@@ -59,19 +81,31 @@ from core.project_trash import (
     restore_trashed_project,
 )
 from core.runtime_config import apply_runtime_config
-from core.schemas import CharacterState, CommercialTarget
+from core.schemas import (
+    ChapterOutline,
+    CharacterState,
+    CommercialTarget,
+    GlobalOutline,
+    ManuscriptContinuity,
+    NovelConcept,
+    VolumeChapterRange,
+    VolumeOutline,
+    WorldSetting,
+)
 from core.state_manager import ChapterContextError, StateManager
-from core.storage import ProjectBusyError, ProjectConflictError, ProjectReadOnlyError, project_lock
+from core.storage import ProjectBusyError, ProjectConflictError, ProjectReadOnlyError, project_lock, remove_file
 from core.task_status import TaskAlreadyRunning, generation_status
 from core.text_limits import ChapterTextLimitError, check_chapter_length, check_replacement_length
 from pipeline.novel_pipeline import NovelPipeline
 from services.generation_jobs import (
     run_audio_package_job,
     run_branch_simulation_job,
+    run_chapter_audit_job,
     run_delivery_job,
     run_pipeline_job,
     run_reader_simulation_job,
     run_regenerate_job,
+    run_related_audit_job,
     run_short_drama_job,
     run_state_reconciliation_job,
 )
@@ -82,6 +116,7 @@ app.add_middleware(RequestLimitsMiddleware)
 app.mount("/assets", StaticFiles(directory=BASE_DIR / "web" / "assets", check_dir=False), name="assets")
 logger = logging.getLogger("novelengine.web")
 _CONFIG_ENDPOINT_LOCK = threading.Lock()
+OFFLINE_DEMO = False
 LOCAL_WEB_HOSTS = {"127.0.0.1", "localhost", "::1", "testserver"}
 RECOVERY_GUIDANCE = [
     "先关闭其他 Moirai 窗口和命令行任务，再刷新诊断。",
@@ -108,6 +143,7 @@ async def protect_local_web_boundary(request: Request, call_next):
         # recovery locks, revisions and job state, so browser caching is unsafe.
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
+        response.headers["X-Moirai"] = "studio"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -299,6 +335,10 @@ def get_novel_detail(novel_id: str):
         (checkpoint.initial_characters or []) if checkpoint else []
     )
     
+    try:
+        candidate = read_chapter_rewrite(sm.base_dir, sm.novel_id)
+    except (OSError, ValueError):
+        candidate = None
     pacing_beats = []
     if state.global_outline and state.global_outline.pacing_schedule:
         pacing_beats = [b.model_dump() for b in state.global_outline.pacing_schedule.pacing_beats]
@@ -319,7 +359,11 @@ def get_novel_detail(novel_id: str):
         "revision": sm.revision,
         "concept": display_concept.model_dump() if display_concept else None,
         "world_setting": display_world.model_dump() if display_world else None,
+        "manuscript_facts": [fact.model_dump() for fact in state.manuscript_continuity.facts] if state.manuscript_continuity else [],
         "global_outline": state.global_outline.model_dump() if state.global_outline else None,
+        "pending_outline_plan": state.pending_outline_plan is not None,
+        "imported_manuscript": state.imported_manuscript,
+        "rewrite_candidate_chapter": candidate.draft.content.chapter_number if candidate else None,
         "pacing_beats": pacing_beats,
         "characters": [c.model_dump() for c in display_characters],
         "foreshadowings": [f.model_dump() for f in state.foreshadowings.values()],
@@ -503,7 +547,7 @@ def create_novel(req: CreateNovelRequest, background_tasks: BackgroundTasks):
     )
 
     try:
-        task_id = generation_status.reserve(req.name)
+        task_id = generation_status.reserve(req.name, step="新建作品", can_stop=True)
     except TaskAlreadyRunning as exc:
         raise HTTPException(
             status_code=400,
@@ -518,6 +562,7 @@ def create_novel(req: CreateNovelRequest, background_tasks: BackgroundTasks):
         chapter_count=req.chapters,
         volumes=req.volumes,
         task_id=task_id,
+        include_adaptations=req.include_adaptations,
     )
     return {"status": "started", "task_id": task_id, "message": "生产流水线已启动！"}
 
@@ -531,6 +576,8 @@ def continue_novel(req: GenerateChaptersRequest, background_tasks: BackgroundTas
     state = pipeline.state_manager.state
     if not state.concept and state.pending_initial_planning is None:
         raise HTTPException(status_code=404, detail="未找到该小说项目的策划案，无法续写！")
+    if state.imported_manuscript and state.global_outline is None:
+        raise HTTPException(status_code=409, detail="请先为存稿建立续写规划")
 
     current_idx = state.current_chapter_idx
     count = req.count
@@ -542,8 +589,13 @@ def continue_novel(req: GenerateChaptersRequest, background_tasks: BackgroundTas
             detail=safe_user_message(exc, fallback="生成范围无效"),
         ) from exc
 
+    if state.global_outline and state.global_outline.volumes:
+        last_range = state.global_outline.volumes[-1].chapter_range
+        if last_range is not None and target_chapters > last_range.end:
+            raise HTTPException(status_code=422, detail=f"续写会超过总纲终章（第 {last_range.end} 章），请调整章数或终章")
+
     try:
-        task_id = generation_status.reserve(req.name)
+        task_id = generation_status.reserve(req.name, step="批量续写", can_stop=True)
     except TaskAlreadyRunning as exc:
         raise HTTPException(
             status_code=400,
@@ -562,6 +614,7 @@ def continue_novel(req: GenerateChaptersRequest, background_tasks: BackgroundTas
         volumes=3,
         task_id=task_id,
         expected_revision=req.expected_revision,
+        include_adaptations=req.include_adaptations,
     )
     if state.pending_initial_planning is not None:
         prefix = f"将从已保存的主策划 {state.pending_initial_planning.next_stage} 阶段恢复，再完成总纲并开始续写。"
@@ -794,6 +847,137 @@ def update_character(novel_id: str, req: CharacterUpdateRequest):
     }
 
 
+@app.post("/api/novel/{novel_id}/manuscript_facts")
+def extract_manuscript_facts(novel_id: str, req: ManuscriptFactsRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    if not req.start <= req.end < req.start + MAX_SOURCE_CHAPTERS:
+        raise HTTPException(status_code=422, detail="一次可提取连续的 1～12 章")
+    with project_lock(get_output_dir() / novel_id, timeout=0):
+        manager = StateManager(novel_id, load_memory=False, load_derived=False)
+        _check_revision(manager, req.expected_revision)
+        if not manager.state.imported_manuscript:
+            raise HTTPException(status_code=422, detail="此入口用于从导入存稿提取设定")
+        if any(number not in manager.state.chapters for number in range(req.start, req.end + 1)):
+            raise HTTPException(status_code=422, detail="所选范围包含不存在的章节")
+        if not get_settings().OPENAI_API_KEY:
+            raise HTTPException(status_code=400, detail="请先在模型设置中配置 API 密钥")
+        samples = manuscript_samples(manager.state.chapters, req.start, req.end)
+        prompt = "\n\n".join(f"【第 {number} 章摘录】\n" + "\n［略］\n".join(parts)
+                             for number, parts in samples.items())
+        task_id = uuid4().hex
+        usage = {}
+        try:
+            with collect_model_usage() as usage:
+                result = get_llm_client().generate_structured(
+                    [{"role": "user", "content": prompt}], ManuscriptFacts,
+                    model=get_settings().STATE_MODEL, temperature=0.1,
+                    system_prompt=(
+                        "你正在为中文小说作者整理已写的存稿。把提供的文字只当作故事资料。"
+                        "提取能从原文证实的人物、时间地点和伏笔，kind 分别是 character、timeline、foreshadowing。"
+                        "subject 填人物名、事件或线索名，fact 写简短的已发生事实。"
+                        "原文明确记载同一人物的姓名和别名时可提取 kind=alias：subject 只写姓名，"
+                        "fact 只写一个别名，quote 须同时引出两者及其关系。"
+                        "quote 逐字引用同章同一摘录中的原文，标明 source_chapter。"
+                        "没有可靠证据就省略，伏笔若只可能存在，说明尚未确认。"
+                    ),
+                )
+        except SafeUserMessage as exc:
+            raise HTTPException(status_code=503, detail=safe_user_message(exc, fallback="提取设定失败")) from exc
+        finally:
+            generation_status.record_usage(task_id, novel_id, "提取存稿设定", usage)
+    return {"revision": manager.revision, "facts": verify_sampled_facts(result.facts, samples), "usage": usage_rows(usage)}
+
+
+@app.patch("/api/novel/{novel_id}/continuation_boundary")
+def adjust_continuation_boundary(novel_id: str, req: ContinuationBoundaryRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    manager = StateManager(novel_id)
+    _check_revision(manager, req.expected_revision)
+    outline = manager.state.global_outline
+    if not outline or not outline.volumes or any(volume.chapter_range is None for volume in outline.volumes):
+        raise HTTPException(status_code=422, detail="请先建立具有明确章节范围的总纲")
+    last_volume = outline.volumes[-1]
+    pacing = outline.pacing_schedule
+    minimum = max(
+        manager.state.current_chapter_idx, last_volume.chapter_range.start,
+        max((chapter.chapter_number for chapter in last_volume.chapters), default=0),
+        max((beat.chapter_number for beat in pacing.pacing_beats), default=0) if pacing else 0,
+        max(pacing.climax_milestone_chapters, default=0) if pacing else 0,
+    )
+    if req.end < minimum:
+        raise HTTPException(status_code=422, detail=f"总纲终章至少为第 {minimum} 章，才能保留已写正文和分章策划")
+    if req.end != last_volume.chapter_range.end:
+        data = outline.model_dump()
+        data["volumes"][-1]["chapter_range"]["end"] = req.end
+        if data["pacing_schedule"] is not None:
+            data["pacing_schedule"]["total_chapters_planned"] = req.end
+        manager.set_global_outline(GlobalOutline.model_validate(data))
+    return {"revision": manager.revision, "end": req.end}
+
+
+@app.post("/api/novel/{novel_id}/continuation_plan")
+def define_continuation_plan(novel_id: str, req: ContinuationPlanRequest):
+    """Start a bounded outline from author-confirmed facts for an existing manuscript."""
+    _ensure_idle()
+    _require_project(novel_id)
+    manager = StateManager(novel_id)
+    _check_revision(manager, req.expected_revision)
+    state = manager.state
+    if state.global_outline or state.pending_initial_planning or state.pending_outline_plan:
+        raise ProjectConflictError("作品已有总纲或处于策划恢复中，请在原大纲中继续")
+    if not state.concept or not state.chapters or state.current_volume_idx != 1:
+        raise HTTPException(status_code=422, detail="续写规划需要现有的单卷存稿")
+    start = state.current_chapter_idx + 1
+    end = start + req.chapters_to_plan - 1
+    if end > 1_000_000:
+        raise HTTPException(status_code=422, detail="规划超出章节安全上限")
+    manager.state_before_chapter(start)
+    concept = state.concept.model_copy(update={
+        "logline": state.concept.logline or req.direction,
+        "core_conflict": req.direction,
+    })
+    world = state.world_setting or WorldSetting(world_name=concept.title, geography_overview="")
+    fact_keys = set()
+    for fact in req.confirmed_facts:
+        source = state.chapters.get(fact.source_chapter)
+        key = (fact.kind, fact.source_chapter, fact.quote)
+        if (source is None or fact.quote not in source.full_text or key in fact_keys
+                or (fact.kind == "alias" and alias_pair(fact) is None)):
+            raise HTTPException(status_code=422, detail="待确认设定引用不存在、已改动或重复")
+        fact_keys.add(key)
+    outline = GlobalOutline(
+        novel_title=concept.title, main_theme=req.direction, total_volumes=1, final_climax=req.direction,
+        volumes=[VolumeOutline(
+            volume_number=1, volume_title=concept.title, volume_goal=req.direction,
+            main_antagonist="", volume_climax=req.direction, chapter_range=VolumeChapterRange(start=1, end=end),
+            chapters=[ChapterOutline(
+                chapter_number=start, volume_number=1, title=req.next_title,
+                summary=req.next_scene, main_conflict=req.next_scene, expectation_hook="",
+            )],
+        )],
+    )
+    with manager.mutation():
+        state.manuscript_continuity = ManuscriptContinuity(
+            background=req.story_so_far, from_chapter=start, facts=req.confirmed_facts,
+        )
+        manager.set_concept(concept)
+        manager.set_world_setting(world)
+        manager.set_global_outline(outline)
+    return {"chapter": start, "end": end, "revision": manager.revision}
+
+
+@app.post("/api/novel/{novel_id}/chapters", status_code=201)
+def append_manual_chapter(novel_id: str, req: AppendChapterRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    manager = StateManager(novel_id)
+    _check_revision(manager, req.expected_revision)
+    chapter = manager.append_manual_chapter(req.title, req.text)
+    return {"chapter": chapter.chapter_number, "revision": manager.revision}
+
+
 @app.patch("/api/novel/{novel_id}/chapter_text")
 def update_chapter_text(novel_id: str, req: ChapterTextRequest):
     _ensure_idle()
@@ -802,11 +986,104 @@ def update_chapter_text(novel_id: str, req: ChapterTextRequest):
     pipeline = NovelPipeline(novel_id=novel_id)
     _check_revision(pipeline.state_manager, req.expected_revision)
     ok = pipeline.state_manager.replace_chapter_text(
-        req.chapter, req.text, mark_reconciliation=True
+        req.chapter, req.text, mark_reconciliation=True, title=req.title,
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"章节不存在: 第 {req.chapter} 章")
     return {"status": "success", "message": f"第 {req.chapter} 章已更新"}
+
+
+@app.get("/api/novel/{novel_id}/chapter/{chapter_num}/versions")
+def chapter_versions(novel_id: str, chapter_num: int):
+    _require_project(novel_id)
+    project_dir = get_output_dir() / novel_id
+    recover_project(project_dir.parent, novel_id)
+    with project_lock(project_dir, scope="snapshot"):
+        chapter, revision = StateManager.read_project_chapter_versioned(novel_id, chapter_num, recover=False)
+        if chapter is None:
+            raise HTTPException(status_code=404, detail="章节不存在")
+        return {"revision": revision, "versions": list_chapter_versions(project_dir, chapter_num)}
+
+
+@app.get("/api/novel/{novel_id}/chapter/{chapter_num}/versions/{number}")
+def chapter_version(novel_id: str, chapter_num: int, number: int):
+    _require_project(novel_id)
+    project_dir = get_output_dir() / novel_id
+    recover_project(project_dir.parent, novel_id)
+    with project_lock(project_dir, scope="snapshot"):
+        chapter, revision = StateManager.read_project_chapter_versioned(novel_id, chapter_num, recover=False)
+        previous = load_chapter_version(project_dir, chapter_num, number) if chapter else None
+        if previous is None:
+            raise HTTPException(status_code=404, detail="历史稿不存在")
+        return {"revision": revision, "version": previous.model_dump()}
+
+
+@app.post("/api/novel/{novel_id}/chapter/{chapter_num}/versions/{number}")
+def restore_chapter_version(novel_id: str, chapter_num: int, number: int, req: ProjectRevisionRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    project_dir = get_output_dir() / novel_id
+    with project_lock(project_dir, timeout=0):
+        manager = StateManager(novel_id)
+        _check_revision(manager, req.expected_revision)
+        previous = load_chapter_version(project_dir, chapter_num, number)
+        if previous is None or chapter_num not in manager.state.chapters:
+            raise HTTPException(status_code=404, detail="历史稿不存在")
+        manager.replace_chapter_text(chapter_num, previous.text, title=previous.title, mark_reconciliation=True)
+    return {"revision": manager.revision, "chapter": chapter_num}
+
+
+@app.post("/api/novel/{novel_id}/chapter/{chapter_num}/audit")
+def audit_chapter(
+    novel_id: str, chapter_num: int, req: ProjectRevisionRequest, background_tasks: BackgroundTasks,
+):
+    _require_project(novel_id)
+    manager = StateManager(novel_id, load_chapter_content=False, load_memory=False, load_derived=False)
+    _check_revision(manager, req.expected_revision)
+    if chapter_num not in manager.state.chapters:
+        raise HTTPException(status_code=404, detail="章节不存在")
+    try:
+        task_id = generation_status.reserve(novel_id, step=f"第 {chapter_num} 章审稿已排队")
+    except TaskAlreadyRunning as exc:
+        raise HTTPException(status_code=400, detail=safe_user_message(exc, fallback="创作任务运行中")) from exc
+    background_tasks.add_task(
+        run_chapter_audit_job, novel_id, chapter_num, task_id, expected_revision=req.expected_revision,
+    )
+    return {"status": "started", "task_id": task_id}
+
+
+@app.post("/api/novel/{novel_id}/chapter/{chapter_num}/audit_related")
+def audit_related_chapters(
+    novel_id: str, chapter_num: int, req: ProjectRevisionRequest, background_tasks: BackgroundTasks,
+):
+    _require_project(novel_id)
+    manager = StateManager(novel_id, load_chapter_content=False, load_memory=False, load_derived=False)
+    _check_revision(manager, req.expected_revision)
+    if chapter_num not in manager.state.chapters:
+        raise HTTPException(status_code=404, detail="章节不存在")
+    related = [chapter_num] + sorted(
+        number for number, chapter in manager.state.chapters.items()
+        if number > chapter_num and chapter.final_audit
+        and any(finding.source_chapter == chapter_num for finding in chapter.final_audit.findings)
+    )
+    if len(related) > 20:
+        raise HTTPException(status_code=422, detail="相关章节超过 20 章，请按章复查")
+    try:
+        task_id = generation_status.reserve(novel_id, step="相关章节复查已排队", can_stop=True)
+    except TaskAlreadyRunning as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    background_tasks.add_task(run_related_audit_job, novel_id, related, task_id, expected_revision=manager.revision)
+    return {"task_id": task_id, "chapters": related}
+
+
+@app.post("/api/novel/{novel_id}/chapter/{chapter_num}/audit_decision")
+def update_audit_decision(novel_id: str, chapter_num: int, req: FindingDecisionRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    manager = StateManager(novel_id, load_memory=False, load_derived=False)
+    _check_revision(manager, req.expected_revision)
+    chapter = manager.record_finding_decision(chapter_num, req.evidence_id, req.decision, req.note.strip())
+    return {"revision": manager.revision, "decisions": chapter.finding_decisions}
 
 
 @app.post("/api/novel/{novel_id}/chapter/{chapter_num}/human_review")
@@ -848,8 +1125,11 @@ def get_compliance(novel_id: str):
     _require_project(novel_id)
     state_manager = StateManager(novel_id=novel_id, load_memory=False, load_derived=False)
     chapters = []
+    if not state_manager.state.chapters:
+        return {"chapters": chapters, "revision": state_manager.revision}
+    terms = compliance_terms()
     for num, chap in sorted(state_manager.state.chapters.items()):
-        hits = scan_text(chap.full_text)
+        hits = scan_text(chap.full_text, terms=terms)
         if hits:
             chapters.append({"chapter_number": num, "title": chap.title, "hits": hits})
     return {"chapters": chapters, "revision": state_manager.revision}
@@ -874,6 +1154,37 @@ def export_backup(novel_id: str):
         return zip_path
 
     return build_download(render, media_type="application/zip")
+
+
+@app.post("/api/novels/preview_docx")
+def preview_docx(document: Annotated[bytes, Body(media_type=DOCX_MEDIA_TYPE)]):
+    try:
+        return {"paragraphs": read_docx(document)}
+    except InvalidManuscriptDocument as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/novels/import_manuscript", status_code=201)
+def import_manuscript(req: ImportManuscriptRequest):
+    """Create a local manuscript project from the author's confirmed chapter split."""
+    _ensure_idle()
+    if not _valid_project_id(req.name):
+        raise HTTPException(status_code=422, detail="项目标识须为 1～64 位中文、字母、数字、下划线或连字符")
+    root = get_output_dir()
+    with project_lock(root / req.name, timeout=0):
+        recover_project(root, req.name)
+        if (root / req.name).exists():
+            raise HTTPException(status_code=409, detail="同名项目已存在，请使用其他项目标识")
+        manager = StateManager(req.name, base_dir=str(root))
+        with manager.mutation(), manager.defer_full_exports():
+            manager.state.imported_manuscript = True
+            manager.set_concept(NovelConcept(
+                title=req.title, genre=req.genre.strip(), logline="",
+                golden_finger="", core_conflict="",
+            ))
+            for chapter in req.chapters:
+                manager.append_manual_chapter(chapter.title, chapter.text)
+    return {"novel_id": manager.novel_id, "chapters": len(req.chapters)}
 
 
 @app.post("/api/novels/import", openapi_extra=BACKUP_REQUEST_BODY)
@@ -960,9 +1271,104 @@ def regenerate_chapter(req: RegenerateRequest, background_tasks: BackgroundTasks
         ) from exc
     background_tasks.add_task(
         run_regenerate_job, name=req.name, chapter=req.chapter, task_id=task_id,
-        expected_revision=req.expected_revision,
+        expected_revision=req.expected_revision, preview=req.preview,
     )
     return {"status": "started", "task_id": task_id, "message": f"已启动第 {req.chapter} 章重写"}
+
+
+@app.get("/api/novel/{novel_id}/rewrite_candidate")
+def read_rewrite_candidate(novel_id: str):
+    _require_project(novel_id)
+    project_dir = (get_output_dir() / novel_id).resolve()
+    recover_project(project_dir.parent, novel_id)
+    try:
+        with project_lock(project_dir, scope="snapshot"):
+            rewrite = read_chapter_rewrite(project_dir, project_dir.name)
+            previous, _ = (StateManager.read_project_chapter_versioned(
+                novel_id, rewrite.draft.content.chapter_number, recover=False,
+            ) if rewrite else (None, ""))
+    except (OSError, ValueError):
+        return {"candidate": None, "warning": "已有重写稿无法读取。确认生成新的重写稿后将替换该文件。"}
+    if rewrite is None:
+        return {"candidate": None}
+    chapter = rewrite.draft.content
+    delta = rewrite.draft.state_delta
+    hunks = [
+        (index, before, after) for index, (kind, before, after) in
+        enumerate(chapter_diff(previous.full_text, chapter.full_text)) if kind != "equal"
+    ] if previous else []
+    return {
+        "candidate": {
+            "task_id": rewrite.task_id,
+            "revision": rewrite.expected_revision,
+            "chapter": chapter.chapter_number,
+            "title": chapter.title,
+            "text": chapter.full_text,
+            "audit_status": chapter.audit_status,
+            "state_extraction_failed": rewrite.draft.state_extraction_failed,
+            "changes": [
+                {"index": index, "before": before, "after": after}
+                for index, before, after in hunks[:500]
+            ],
+            "change_count": len(hunks),
+            "state_effects": {
+                "affected_characters": list(delta.character_updates) + [item.name for item in delta.newly_introduced_characters],
+                "new_hooks": len(delta.new_foreshadowings),
+                "resolved_hooks": len(delta.resolved_foreshadowing_ids),
+                "new_items": delta.newly_introduced_items,
+            },
+        },
+    }
+
+
+@app.post("/api/novel/{novel_id}/rewrite_candidate")
+def apply_rewrite_candidate(novel_id: str, req: ChapterRewriteRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    with project_lock(get_output_dir() / novel_id, timeout=0):
+        pipeline = NovelPipeline(novel_id)
+        _check_revision(pipeline.state_manager, req.expected_revision)
+        manager = pipeline.state_manager
+        try:
+            rewrite = read_chapter_rewrite(manager.base_dir, manager.novel_id)
+        except (OSError, ValueError) as exc:
+            raise ProjectConflictError("重写稿无法读取，请重新生成") from exc
+        if rewrite is None or req.task_id != rewrite.task_id:
+            raise HTTPException(status_code=404, detail="重写稿已不存在，请重新生成")
+        manager.assert_revision(rewrite.expected_revision)
+        number = rewrite.draft.content.chapter_number
+        merged = None
+        if req.selected_hunks is not None:
+            try:
+                merged = apply_chapter_hunks(
+                    manager.state.chapters[number].full_text, rewrite.draft.content.full_text, req.selected_hunks,
+                )
+            except (KeyError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail="选择的段落已变动，请重新打开候选稿") from exc
+            if not merged.strip():
+                raise HTTPException(status_code=422, detail="选中的修改会留下空白正文")
+        with manager.mutation():
+            if merged is None:
+                pipeline.commit_chapter_draft(rewrite.draft)
+            else:
+                manager.replace_chapter_text(number, merged, mark_reconciliation=True)
+            remove_file(manager.base_dir / REWRITE_FILENAME, missing_ok=False)
+    return {"chapter": rewrite.draft.content.chapter_number, "revision": pipeline.state_manager.revision}
+
+
+@app.delete("/api/novel/{novel_id}/rewrite_candidate/{task_id}")
+def discard_rewrite_candidate(novel_id: str, task_id: str):
+    _require_project(novel_id)
+    project_dir = (get_output_dir() / novel_id).resolve()
+    with project_lock(project_dir, timeout=0), project_lock(project_dir, scope="snapshot"):
+        try:
+            rewrite = read_chapter_rewrite(project_dir, project_dir.name)
+        except (OSError, ValueError) as exc:
+            raise ProjectConflictError("重写稿无法读取，请重新生成") from exc
+        if rewrite is None or rewrite.task_id != task_id:
+            raise HTTPException(status_code=404, detail="重写稿已不存在")
+        remove_file(project_dir / REWRITE_FILENAME, missing_ok=False)
+    return {"status": "discarded"}
 
 
 @app.patch("/api/novel/{novel_id}/outline/{chapter_num}")
@@ -1049,7 +1455,6 @@ def para_rewrite(novel_id: str, req: ParaRewriteRequest):
     # Keep this available for legacy projects without an initial snapshot.
     concept = pipeline.state_manager.state.concept
 
-    from core.llm import get_llm_client
     prompt = f"""【任务】只重写下面被选中的一个段落，其余段落仅供参考上下文，严禁输出任何别的内容。
 
 【作品】《{concept.title if concept else ""}》第 {req.chapter} 章 《{chap.title}》
@@ -1067,11 +1472,15 @@ def para_rewrite(novel_id: str, req: ParaRewriteRequest):
 
 要求：保持人称与时态一致；与前后文自然衔接；直接输出重写后的段落正文，不要任何解释或引号。"""
 
-    rewritten = get_llm_client().generate_text(
-        messages=[{"role": "user", "content": prompt}],
-        model=pipeline.settings.WRITER_MODEL,
-        temperature=0.7,
-    )
+    with collect_model_usage() as usage:
+        try:
+            rewritten = get_llm_client().generate_text(
+                messages=[{"role": "user", "content": prompt}],
+                model=pipeline.settings.WRITER_MODEL,
+                temperature=0.7,
+            )
+        finally:
+            generation_status.record_usage(uuid4().hex, novel_id, f"第 {req.chapter} 章段落改写", usage)
     return {
         "status": "success", "original": target, "rewritten": rewritten.strip(),
         "revision": pipeline.state_manager.revision,
@@ -1114,11 +1523,83 @@ def save_custom_words_api(req: CustomWordsRequest):
     return {"status": "success", "message": f"已保存 {sum(len(v) for v in clean.values())} 条自定义词"}
 
 
+@app.get("/api/model_preview")
+def model_preview(
+    operation: Literal["create", "continue", "audit", "facts"],
+    novel_id: str = "", chapter: int = Query(1, ge=1, le=1_000_000), count: int = Query(1, ge=1, le=50),
+    include_adaptations: bool = False, idea_length: int = Query(0, ge=0, le=20_000),
+):
+    """Describe possible outbound context and estimate tokens without a model call."""
+    settings = get_settings()
+    models = {
+        "策划": settings.PLANNER_MODEL, "正文": settings.WRITER_MODEL,
+        "审稿": settings.CRITIC_MODEL, "状态": settings.STATE_MODEL,
+    }
+    data_scope = "本次输入的创意、题材与偏好，以及任务内生成的策划和正文"
+    source_chapters = []
+    next_chapters = []
+    revision = ""
+    audit_preview = {}
+    if operation == "create":
+        low, high = idea_length + 3_000, idea_length * 4 + 20_000
+    elif operation == "continue":
+        _require_project(novel_id)
+        manager = StateManager(novel_id, load_chapter_content=False, load_memory=False, load_derived=False)
+        revision = manager.revision
+        current = manager.state.current_chapter_idx
+        source_chapters = sorted(n for n in manager.state.chapters if current - 2 <= n <= current)
+        next_chapters = list(range(current + 1, current + count + 1))
+        data_scope = "策划、细纲、人物与伏笔状态、最近章节摘要和运行时检索的前文片段"
+        low, high = 0, 20_000 if manager.state.pending_initial_planning or manager.state.pending_outline_plan else 0
+    else:
+        _require_project(novel_id)
+        manager = StateManager(novel_id, load_memory=False, load_derived=False)
+        revision = manager.revision
+        if operation == "facts":
+            if count > MAX_SOURCE_CHAPTERS or any(number not in manager.state.chapters for number in range(chapter, chapter + count)):
+                raise HTTPException(status_code=422, detail="所选范围包含不存在的章节或超过 12 章")
+            models = {"状态": settings.STATE_MODEL}
+            samples = manuscript_samples(manager.state.chapters, chapter, chapter + count - 1)
+            source_chapters = list(samples)
+            data_scope = "所选每章至多 1,500 字，长章节取章首与章末"
+            size = sum(len(part) for parts in samples.values() for part in parts)
+        else:
+            target = manager.state.chapters.get(chapter)
+            if target is None:
+                raise HTTPException(status_code=404, detail="该章不存在")
+            models = {"审稿": settings.CRITIC_MODEL}
+            evidence = retrieve_audit_evidence(
+                manager.state.chapters, chapter, target.full_text, continuity=manager.state.manuscript_continuity,
+            )
+            source_chapters = [chapter, *sorted({passage["chapter"] for passage in evidence.passages})]
+            data_scope = "本章正文、列出的前文章节摘录，以及可用的人物、设定与大纲；本地检索范围不等于送审范围"
+            size = len(target.full_text) + sum(len(passage["text"]) for passage in evidence.passages)
+            audit_preview["retrieval_coverage"] = evidence.coverage.model_dump()
+        low, high = size // 2 + 500, size * 2 + 8_000
+    if operation in {"create", "continue"}:
+        words = settings.WORDS_PER_BEAT * settings.BEATS_PER_CHAPTER
+        low += count * (words + 2_000)
+        high += count * ((words * 4 + 15_000) * (1 + settings.MAX_AUDIT_RETRIES))
+        if include_adaptations:
+            high += 10_000 + count * 7_000
+    try:
+        hostname = urlparse(settings.OPENAI_BASE_URL).hostname or ""
+    except ValueError:
+        hostname = ""
+    return {
+        "revision": revision, "host": "" if OFFLINE_DEMO else hostname, "offline": OFFLINE_DEMO,
+        "configured": bool(settings.OPENAI_API_KEY), "models": models,
+        "scope": data_scope, "source_chapters": source_chapters, "next_chapters": next_chapters,
+        "estimated_tokens": [0, 0] if OFFLINE_DEMO else [low, high],
+        **audit_preview,
+    }
+
+
 @app.get("/api/llm_usage")
 def get_llm_usage():
     """本进程累计的真实 token 用量（API usage 优先，缺失时为估算值）"""
     from core.llm import LLMClient
-    return LLMClient.usage_snapshot()
+    return {**LLMClient.usage_snapshot(), "recent_tasks": generation_status.recent_usage()}
 
 
 @app.post("/api/novel/{novel_id}/adopt_branch")
@@ -1185,6 +1666,37 @@ def export_novel_epub(novel_id: str):
     return _publication_download(novel_id, "epub")
 
 
+@app.get("/api/novel/{novel_id}/export_docx")
+def export_novel_docx(novel_id: str):
+    return _publication_download(novel_id, "docx")
+
+
+@app.get("/api/novel/{novel_id}/export_chapter_bundle")
+def export_novel_chapter_bundle(novel_id: str):
+    return _publication_download(novel_id, "chapter_bundle")
+
+
+@app.get("/api/novel/{novel_id}/publication_preview")
+def publication_preview(novel_id: str, chapter: int = Query(ge=1, le=1_000_000)):
+    _require_project(novel_id)
+    content, revision = StateManager.read_project_chapter_versioned(novel_id, chapter)
+    if content is None:
+        raise HTTPException(status_code=404, detail="该章不存在")
+    return {
+        "revision": revision,
+        "chapter": chapter,
+        "title": content.title,
+        "text": f"第{chapter}章 {content.title}\n\n{content.full_text}\n",
+        "has_unreviewed_changes": content.human_review_status != "approved",
+        "official_rules": [
+            {"title": "番茄小说长篇发文规则", "url": "https://fanqienovel.com/writer/zone/article/7639950766869839897",
+             "date": "2026-10-31"},
+            {"title": "番茄小说签约评估标准", "url": "https://fanqienovel.com/writer/zone/help/article?rank1=10189&rank2=10191&rank3=0",
+             "date": "2026-09-07"},
+        ],
+    }
+
+
 def _publication_download(novel_id: str, format: str):
     """Export a consistent prose snapshot without changing the editorial revision."""
     _ensure_idle()
@@ -1195,17 +1707,27 @@ def _publication_download(novel_id: str, format: str):
         manager = StateManager(novel_id, load_memory=False, load_derived=False)
         if manager.load_warnings:
             raise ProjectReadOnlyError("项目存在无法读取的数据，已暂停正文导出以免遗漏内容；请先检查加载警告")
-    if format == "epub" and not manager.state.chapters:
+    if format in {"epub", "docx", "chapter_bundle"} and not manager.state.chapters:
         raise HTTPException(status_code=400, detail="暂无章节，无法导出")
 
     def render(directory: Path) -> Path:
         if format == "txt":
             export_platform_text(directory, manager.novel_id, manager.state, sync_chapters=False)
             return directory / f"{manager.novel_id}_全本发布稿.txt"
-        exporter = export_epub if format == "epub" else export_markdown
+        if format == "chapter_bundle":
+            bundle = directory / f"{manager.novel_id}_分章稿.zip"
+            with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
+                for number in sorted(manager.state.chapters):
+                    chapter_file = export_platform_chapter(directory, manager.state.chapters[number])
+                    archive.write(chapter_file, chapter_file.name)
+            return bundle
+        exporter = {"epub": export_epub, "docx": export_docx, "markdown": export_markdown}[format]
         return exporter(directory, manager.novel_id, manager.state)
 
-    media_type = {"epub": "application/epub+zip", "txt": "text/plain", "markdown": "text/markdown"}[format]
+    media_type = {
+        "epub": "application/epub+zip", "txt": "text/plain", "markdown": "text/markdown",
+        "docx": DOCX_MEDIA_TYPE, "chapter_bundle": "application/zip",
+    }[format]
     response = build_download(render, media_type=media_type)
     response.headers["X-Project-Revision"] = manager.revision
     return response
@@ -1296,6 +1818,13 @@ def generate_audio_package(
     return {"status": "started", "task_id": task_id, "message": "有声演播配置生成已启动"}
 
 
+@app.post("/api/status/{task_id}/stop")
+def stop_generation(task_id: str):
+    if not generation_status.request_stop(task_id):
+        raise HTTPException(status_code=409, detail="任务已结束或当前步骤不能停止")
+    return {"status": "stopping", "message": "完成当前策划或章节后停止，已保存内容会保留。"}
+
+
 @app.get("/api/status")
 def get_task_status():
     return generation_status.snapshot()
@@ -1329,4 +1858,9 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
 
 
 if __name__ == "__main__":
-    start_server()
+    parser = argparse.ArgumentParser(description="Moirai 中文长篇小说创作台")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    if not 1 <= args.port <= 65535:
+        parser.error("端口必须在 1–65535 之间")
+    start_server(port=args.port)

@@ -15,6 +15,7 @@ from rich.console import Console
 
 from config.settings import get_settings
 from core.error_reporting import SafeUserMessage, referenced_failure, report_internal_error
+from core.model_usage import record_model_usage
 
 T = TypeVar("T", bound=BaseModel)
 console = Console()
@@ -421,7 +422,7 @@ class LLMClient:
                     # disconnect while waiting only for the optional usage tail
                     # must not repeat a completed, potentially billable request.
                     if finish_reason is None:
-                        self._record_usage(messages, "".join(parts), usage)
+                        self._record_usage(messages, "".join(parts), usage, model=model)
                         raise
                     completed_iteration = True
             finally:
@@ -431,7 +432,7 @@ class LLMClient:
 
         text = "".join(parts)
         if completed_iteration:
-            self._record_usage(messages, text, usage)
+            self._record_usage(messages, text, usage, model=model)
         if refusal_parts or finish_reason in {"content_filter", "safety"}:
             raise LLMRefusalError("LLM 拒绝或过滤了本次输出")
         if finish_reason == "length":
@@ -444,18 +445,23 @@ class LLMClient:
             raise EmptyLLMResponseError("LLM 返回了空内容")
         return text
 
-    def _record_usage(self, messages: list[dict[str, str]], output_text: str, usage: Any | None) -> None:
+    def _record_usage(
+        self, messages: list[dict[str, str]], output_text: str, usage: Any | None, *, model: str = "",
+    ) -> None:
         try:
+            estimated = usage is None or not getattr(usage, "total_tokens", 0)
+            prompt = (sum(len(m.get("content") or "") for m in messages) if estimated
+                      else int(getattr(usage, "prompt_tokens", 0) or 0))
+            completion = len(output_text) if estimated else int(getattr(usage, "completion_tokens", 0) or 0)
             with self._USAGE_LOCK:
-                if usage is not None and getattr(usage, "total_tokens", 0):
-                    self.USAGE_TOTALS["prompt_tokens"] += int(getattr(usage, "prompt_tokens", 0) or 0)
-                    self.USAGE_TOTALS["completion_tokens"] += int(getattr(usage, "completion_tokens", 0) or 0)
-                else:
-                    self.USAGE_TOTALS["prompt_tokens"] += sum(len(m.get("content") or "") for m in messages)
-                    self.USAGE_TOTALS["completion_tokens"] += len(output_text)
+                self.USAGE_TOTALS["prompt_tokens"] += prompt
+                self.USAGE_TOTALS["completion_tokens"] += completion
+                if estimated:
                     self.USAGE_TOTALS["estimated"] = True
                 self.USAGE_TOTALS["calls"] += 1
+            record_model_usage(model or self.settings.DEFAULT_MODEL, prompt, completion, estimated=estimated)
         except Exception:
+            # Usage is diagnostic and cannot affect a completed model request.
             pass
 
     def generate_text(

@@ -12,6 +12,7 @@ from config.compliance_words import (
     MAX_CUSTOM_WORDS,
     normalize_custom_words,
 )
+from core.schemas import ManuscriptFact
 from core.text_limits import MAX_CHAPTER_TEXT_CHARS
 
 
@@ -91,11 +92,60 @@ class CreateNovelRequest(RequestModel):
     avoided_tropes: list[Tag] = Field(default_factory=list, max_length=50)
     chapters: int = Field(default=3, strict=True, ge=1, le=50)
     volumes: int = Field(default=3, strict=True, ge=1, le=20)
+    include_adaptations: bool = Field(default=True, strict=True)
+
+
+class ManuscriptChapter(RequestModel):
+    title: Tag
+    text: Text = Field(min_length=1, max_length=MAX_CHAPTER_TEXT_CHARS)
+
+    @field_validator("text")
+    @classmethod
+    def require_prose(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("章节正文不能为空")
+        return value
+
+
+class AppendChapterRequest(ManuscriptChapter, ProjectRevisionRequest):
+    pass
+
+
+class ContinuationPlanRequest(ProjectRevisionRequest):
+    story_so_far: Annotated[Text, StringConstraints(strip_whitespace=True, max_length=8_000)] = ""
+    direction: Annotated[Text, StringConstraints(strip_whitespace=True, min_length=1, max_length=4_000)]
+    next_title: Tag
+    next_scene: Annotated[Text, StringConstraints(strip_whitespace=True, min_length=1, max_length=4_000)]
+    chapters_to_plan: int = Field(strict=True, ge=1, le=100)
+    confirmed_facts: list[ManuscriptFact] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="after")
+    def require_author_context(self):
+        if not self.story_so_far and not self.confirmed_facts:
+            raise ValueError("请补充已发生剧情或确认从原稿提取的设定")
+        return self
+
+
+class ManuscriptFactsRequest(ProjectRevisionRequest):
+    start: ChapterNumber
+    end: ChapterNumber
+
+
+class ContinuationBoundaryRequest(ProjectRevisionRequest):
+    end: ChapterNumber
+
+
+class ImportManuscriptRequest(RequestModel):
+    name: Tag
+    title: Tag
+    genre: Text = Field(default="", max_length=200)
+    chapters: list[ManuscriptChapter] = Field(min_length=1, max_length=500)
 
 
 class GenerateChaptersRequest(ProjectRevisionRequest):
     name: Text = Field(min_length=1, max_length=64)
     count: int = Field(default=3, strict=True, ge=1, le=50)
+    include_adaptations: bool = Field(default=True, strict=True)
 
 
 class RollbackRequest(ProjectRevisionRequest):
@@ -166,6 +216,7 @@ class HistoryRepairRequest(ProjectRevisionRequest):
 
 class ChapterTextRequest(ProjectRevisionRequest):
     chapter: ChapterNumber
+    title: Tag | None = None
     text: Text = Field(min_length=1, max_length=MAX_CHAPTER_TEXT_CHARS)
 
     @field_validator("text")
@@ -174,6 +225,12 @@ class ChapterTextRequest(ProjectRevisionRequest):
         if not value.strip():
             raise ValueError("正文不能为空白")
         return value
+
+
+class FindingDecisionRequest(ProjectRevisionRequest):
+    evidence_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: Literal["confirmed", "dismissed", "intentional", "reopen"]
+    note: Text = Field(default="", max_length=1000)
 
 
 class HumanReviewRequest(ProjectRevisionRequest):
@@ -191,6 +248,12 @@ class HumanReviewRequest(ProjectRevisionRequest):
 class RegenerateRequest(ProjectRevisionRequest):
     name: Text = Field(min_length=1, max_length=64)
     chapter: ChapterNumber
+    preview: bool = Field(default=False, strict=True)
+
+
+class ChapterRewriteRequest(ProjectRevisionRequest):
+    task_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    selected_hunks: list[Annotated[int, Field(strict=True, ge=0, le=4_000)]] | None = Field(default=None, max_length=500)
 
 
 class OutlineUpdateRequest(ProjectRevisionRequest):

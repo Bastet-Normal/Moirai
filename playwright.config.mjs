@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { existsSync } from 'node:fs';
 
 const baseURL = process.env.SAFARI_BASE_URL || 'http://127.0.0.1:8769';
 const target = new URL(baseURL);
@@ -10,6 +11,16 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('SAFARI_BASE_URL contains an invalid port');
 }
 
+const python = process.env.SAFARI_TEST_PYTHON;
+if (python && !/^\/[A-Za-z0-9_. /-]+$/.test(python)) {
+    throw new Error('SAFARI_TEST_PYTHON must be an absolute macOS Python path');
+}
+const localPython = './.venv/bin/python';
+const runtime = python
+    ? `"${python}"`
+    : existsSync(localPython)
+        ? `"${localPython}"`
+        : 'uv run --isolated --no-project --python 3.11 --with-requirements requirements-dev.lock python';
 process.env.SAFARI_BASE_URL = baseURL;
 export default defineConfig({
     testDir: './tests/browser',
@@ -25,7 +36,7 @@ export default defineConfig({
         trace: 'retain-on-failure',
     },
     webServer: {
-        command: `uv run --isolated --no-project --python 3.11 --with-requirements requirements-dev.lock python tests/browser/serve_safari_demo.py --port ${port}`,
+        command: `${runtime} tests/browser/serve_safari_demo.py --port ${port}`,
         url: `${baseURL}/api/novels`,
         reuseExistingServer: false,
         timeout: 180_000,

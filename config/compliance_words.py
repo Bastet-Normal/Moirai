@@ -101,32 +101,32 @@ def save_custom_words(words: object) -> None:
     atomic_write_json(words_file, normalize_custom_words(words))
 
 
-def scan_text(text: str) -> list:
-    """扫描文本，返回命中列表：[{word, category, count, first_pos, context}]，按出现次数降序。"""
-    hits = []
-    if not text:
-        return hits
-    merged: dict = {k: list(v) for k, v in COMPLIANCE_CATEGORIES.items()}
+def compliance_terms() -> list[tuple[str, str]]:
+    merged = {category: dict.fromkeys(words) for category, words in COMPLIANCE_CATEGORIES.items()}
     for category, words in get_custom_words().items():
-        merged.setdefault(category, [])
-        existing = set(merged[category])
-        for word in words:
-            if word not in existing:
-                merged[category].append(word)
-                existing.add(word)
-    for category, words in merged.items():
-        for word in words:
-            count = text.count(word)
-            if count > 0:
-                pos = text.find(word)
-                ctx_start = max(0, pos - 10)
-                ctx = ("…" if ctx_start > 0 else "") + text[ctx_start:pos + len(word) + 10] + ("…" if pos + len(word) + 10 < len(text) else "")
-                hits.append({
-                    "word": word,
-                    "category": category,
-                    "count": count,
-                    "first_pos": pos,
-                    "context": ctx.replace("\n", " "),
-                })
-    hits.sort(key=lambda h: h["count"], reverse=True)
+        merged.setdefault(category, {}).update(dict.fromkeys(words))
+    return [(category, word) for category, words in merged.items() for word in words]
+
+
+def scan_text(text: str, *, terms: list[tuple[str, str]] | None = None) -> list:
+    """Return matches in descending count, using one vocabulary snapshot per scan."""
+    if not text:
+        return []
+    hits = []
+    for category, word in compliance_terms() if terms is None else terms:
+        count = text.count(word)
+        if not count:
+            continue
+        pos = text.find(word)
+        start = max(0, pos - 10)
+        end = pos + len(word) + 10
+        context = ("…" if start else "") + text[start:end] + ("…" if end < len(text) else "")
+        hits.append({
+            "word": word,
+            "category": category,
+            "count": count,
+            "first_pos": pos,
+            "context": context.replace("\n", " "),
+        })
+    hits.sort(key=lambda hit: hit["count"], reverse=True)
     return hits

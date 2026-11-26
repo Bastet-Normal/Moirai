@@ -346,6 +346,31 @@ class TestGenerationJobs(IsolatedConcurrencyCase):
         report = [json.loads(line) for line in (self.manager.base_dir / "generation_report.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual([(item["chapter"], item["ok"]) for item in report], [(1, True), (2, False)])
 
+    def test_stopping_a_batch_keeps_the_completed_chapter(self):
+        pipeline = NovelPipeline("book")
+        token = self.status.reserve("book", can_stop=True)
+
+        def generate(number):
+            result = chapter(number)
+            pipeline.state_manager.save_chapter(result)
+            self.assertFalse(self.status.request_stop("old-task"))
+            self.assertTrue(self.status.request_stop(token))
+            return result
+
+        pipeline.generate_single_chapter = Mock(side_effect=generate)
+        pipeline.generate_commercial_package = Mock()
+        with patch("services.generation_jobs.NovelPipeline", return_value=pipeline) as cls:
+            cls.plan_chapter_range = NovelPipeline.plan_chapter_range
+            run_pipeline_job("book", "", "", None, 3, 1, token)
+
+        pipeline.generate_single_chapter.assert_called_once_with(1)
+        pipeline.generate_commercial_package.assert_not_called()
+        self.assertEqual(sorted(StateManager("book").state.chapters), [1])
+        status = self.status.snapshot()
+        self.assertFalse(status["is_running"])
+        self.assertFalse(status["can_stop"])
+        self.assertEqual(status["current_step"], "生成已停止，本批次已保存 1 章")
+
     def test_new_job_never_silently_continues_existing_project(self):
         with patch("services.generation_jobs.NovelPipeline") as pipeline:
             run_pipeline_job("book", "新的创意", "", None, 3, 1)

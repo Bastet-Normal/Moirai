@@ -41,6 +41,7 @@ class Element {
     getAttribute(name) { return this.attributes.get(name) ?? null; }
     hasAttribute(name) { return this.attributes.has(name); }
     removeAttribute(name) { this.attributes.delete(name); }
+    replaceChildren() { this.innerHTML = ''; }
     querySelector() { return null; }
     querySelectorAll() { return []; }
     scrollIntoView(options) { this.scrollOptions = options; }
@@ -71,8 +72,14 @@ function setup({workspace = false} = {}) {
         hidden: false,
     };
     const requests = [];
+    const stored = new Map();
     const context = vm.createContext({
         document,
+        localStorage: {
+            getItem: key => stored.get(key) ?? null,
+            setItem: (key, value) => stored.set(key, String(value)),
+        },
+        TextEncoder,
         window: {addEventListener() {}, matchMedia: () => ({matches: false})},
         requestAnimationFrame: callback => callback(),
         getComputedStyle: element => ({visibility: element.style.visibility ?? "visible"}),
@@ -129,8 +136,9 @@ test('refresh preserves the current tab, chapter identity, expanded directory an
     s.el('workspace-tabs').scrollLeft = 130;
     const refresh = s.run('refreshProjectContext(captureProjectContext())');
     s.respond(s.requests[0], {...detail('a'), chapters:chapters([1,2,3])});
-    s.respond(s.requests[1], {});
     assert.equal(await refresh, true);
+    assert.equal(s.requests[1].url, '/api/novel/a/compliance');
+    s.respond(s.requests[1], {revision:'a'.repeat(64), chapters:[]});
     assert.equal(s.run('activeTab'), 'characters');
     assert.equal(s.run('selectedChapterNum'), 3);
     assert.equal(s.run('selectedChapterIdx'), 2);
@@ -141,7 +149,6 @@ test('refresh preserves the current tab, chapter identity, expanded directory an
     assert.equal(s.el('reader-scroll').scrollTop, 240);
     const select = s.run("selectNovel('a')");
     s.respond(s.requests[2], {...detail('a'), chapters:chapters([1,2,3])});
-    s.respond(s.requests[3], {});
     await select;
     assert.equal(s.run('activeTab'), 'chapters');
     assert.equal(s.run('selectedChapterNum'), 1);
@@ -217,16 +224,15 @@ test('lazy text restores reading position only after loading, and a later chapte
         s.el('reader-scroll').scrollTop = 700;
         const refresh = s.run('refreshProjectContext(captureProjectContext())');
         s.respond(s.requests[0], {...detail('a'), chapters:chapters([1,2], false)});
-        s.respond(s.requests[1], {});
         await new Promise(resolve => setImmediate(resolve));
-        assert.equal(s.requests.length, 3);
+        assert.equal(s.requests.length, 2);
         s.el('reader-scroll').scrollTop = 0; // Browser clamps while loading placeholder is short.
         if (changeChapter) {
             const later = s.run('showChapter(1)');
-            s.respond(s.requests[3], {novel_id:'a', revision:'a'.repeat(64), chapter:chapters([2])[0]});
+            s.respond(s.requests[2], {novel_id:'a', revision:'a'.repeat(64), chapter:chapters([2])[0]});
             await later;
         }
-        s.respond(s.requests[2], {novel_id:'a', revision:'a'.repeat(64), chapter:chapters([1])[0]});
+        s.respond(s.requests[1], {novel_id:'a', revision:'a'.repeat(64), chapter:chapters([1])[0]});
         await refresh;
         assert.equal(s.el('reader-scroll').scrollTop, changeChapter ? 0 : 700);
         assert.equal(s.run('selectedChapterNum'), changeChapter ? 2 : 1);
@@ -242,7 +248,6 @@ test('a removed chapter falls back without restoring another chapter scroll; ear
         s.el('reader-scroll').scrollTop = 220;
         const refresh = s.run('refreshProjectContext(captureProjectContext())');
         s.respond(s.requests[0], {...detail('a'), chapters:chapters(Array.from({length:12}, (_,i)=>i+1))});
-        s.respond(s.requests[1], {});
         await refresh;
         assert.equal(s.run('selectedChapterNum'), 3);
         assert.equal(s.run('window._allChaptersShown'), true);
@@ -257,11 +262,9 @@ test('a refresh superseded by reopening the same book cannot restore old navigat
     s.run("selectedChapterNum=3; switchTab('characters')");
     const old=s.run('refreshProjectContext(captureProjectContext())');
     const latest=s.run("selectNovel('a')");
-    s.respond(s.requests[2], {...detail('a', 'b'.repeat(64)), chapters:chapters([1,2])});
-    s.respond(s.requests[3], {});
+    s.respond(s.requests[1], {...detail('a', 'b'.repeat(64)), chapters:chapters([1,2])});
     await latest;
     s.respond(s.requests[0], {...detail('a'), chapters:chapters([1,2,3])});
-    s.respond(s.requests[1], {});
     assert.equal(Boolean(await old),false);
     assert.equal(s.run('activeTab'),'chapters');
     assert.equal(s.run('selectedChapterNum'),1);
@@ -275,9 +278,8 @@ test('task completion refresh keeps the author on the editing tab', async () => 
     const poll=s.run('refreshTaskStatus()');
     s.respond(s.requests[0], {is_running:false,current_novel:'a',current_step:'完成',task_id:'finished'});
     await poll;
-    assert.equal(s.requests.length,3);
+    assert.equal(s.requests.length,2);
     s.respond(s.requests[1], {...detail('a'),chapters:chapters([1,2,3])});
-    s.respond(s.requests[2], {});
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(s.run('activeTab'),'characters');
     assert.equal(s.run('selectedChapterNum'),2);
@@ -454,11 +456,9 @@ test('late selection responses cannot paint another book or the same book from a
         const s = setup();
         const old = s.run("selectNovel('a')");
         const latest = s.run(`selectNovel('${secondId}')`);
-        s.respond(s.requests[2], detail(secondId, 'b'.repeat(64)));
-        s.respond(s.requests[3], {revision: 'b'.repeat(64), chapters: []});
+        s.respond(s.requests[1], detail(secondId, 'b'.repeat(64)));
         await latest;
         s.respond(s.requests[0], detail('a', 'a'.repeat(64)));
-        s.respond(s.requests[1], {revision: 'a'.repeat(64), chapters: []});
         await old;
         assert.equal(s.run('novelData.revision'), 'b'.repeat(64));
         assert.equal(s.run('currentNovelId'), secondId);
@@ -470,14 +470,30 @@ test('late selection errors cannot hide the newly selected book', async () => {
     const s = setup();
     const old = s.run("selectNovel('a')");
     const latest = s.run("selectNovel('b')");
-    s.respond(s.requests[2], detail('b'));
-    s.respond(s.requests[3], {revision: 'b'.repeat(64), chapters: []});
+    s.respond(s.requests[1], detail('b'));
     await latest;
     s.requests[0].reject(new Error('old request disconnected'));
-    s.respond(s.requests[1], {});
     await old;
     assert.equal(s.run('currentNovelId'), 'b');
     assert.equal(s.run('toasts.length'), 0);
+});
+
+test('the reader opens and switches books while a previous compliance scan is pending', async () => {
+    const s = setup({workspace:true});
+    const first = s.run("selectNovel('a')");
+    s.respond(s.requests[0], {...detail('a'), chapters:chapters([1])});
+    assert.equal(await first, true);
+    assert.equal(s.el('novel-workspace').hasAttribute('inert'), false);
+    assert.equal(s.requests[1].url, '/api/novel/a/compliance');
+
+    const second = s.run("selectNovel('b')");
+    s.respond(s.requests[2], {...detail('b'), chapters:chapters([1])});
+    assert.equal(await second, true);
+    s.respond(s.requests[1], {revision:'a'.repeat(64), chapters:[{chapter_number:1,hits:[{word:'旧稿'}]}]});
+    s.respond(s.requests[3], {revision:'b'.repeat(64), chapters:[{chapter_number:1,hits:[{word:'新稿'}]}]});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(s.run('window._complianceMap[1][0].word'), '新稿');
+    assert.equal(s.run('window._compliancePending'), false);
 });
 
 test('chapter responses require the exact directory revision', async () => {
@@ -522,6 +538,45 @@ test('a chapter editor stays bound to its opening project and version', async ()
     assert.equal(s.requests.length, 1); // no stolen navigation after the late save
 });
 
+test('an old recovered draft cannot write over new chapter text without an explicit comparison decision', async () => {
+    const s = setup();
+    s.bind('book', 'a'.repeat(64));
+    s.run("sortedChapters = [{chapter_number:1,title:'旧标题',full_text:'原始正文'}]; openChapterEditModal()");
+    s.el('ce-text').value = '未提交的草稿';
+    s.run('stashChapterDraft()');
+    s.bind('book', 'b'.repeat(64));
+    s.run("sortedChapters = [{chapter_number:1,title:'新标题',full_text:'另一处保存的正式稿'}]; openChapterEditModal()");
+    const blocked = s.run('saveChapterEdit()');
+    assert.equal(s.requests.length, 0);
+    await blocked;
+    assert.equal(s.el('ce-conflict-base').textContent, '旧标题\n\n原始正文');
+    assert.equal(s.el('ce-conflict-current').textContent, '新标题\n\n另一处保存的正式稿');
+    assert.equal(s.el('ce-text').value, '未提交的草稿');
+    s.run('acceptRecoveredDraft()');
+    s.run('refreshProjectContext = async () => false');
+    const save = s.run('saveChapterEdit()');
+    assert.equal(JSON.parse(s.requests[0].options.body).expected_revision, 'b'.repeat(64));
+    s.respond(s.requests[0], {});
+    await save;
+});
+
+test('a project-only revision change does not block a draft on the same chapter baseline', async () => {
+    const s = setup();
+    const open = "sortedChapters = [{chapter_number:1,title:'A',full_text:'正式稿'}]; openChapterEditModal()";
+    s.bind('book', 'a'.repeat(64));
+    s.run(open);
+    s.el('ce-text').value = '继续写';
+    s.run('stashChapterDraft()');
+    s.bind('book', 'b'.repeat(64));
+    s.run(open);
+    s.run('refreshProjectContext = async () => false');
+    const save = s.run('saveChapterEdit()');
+    assert.equal(s.requests.length, 1);
+    assert.equal(JSON.parse(s.requests[0].options.body).text, '继续写');
+    s.respond(s.requests[0], {});
+    await save;
+});
+
 test('an old save acknowledgement does not close a newly opened editor', async () => {
     const s = setup();
     s.bind('a');
@@ -536,6 +591,38 @@ test('an old save acknowledgement does not close a newly opened editor', async (
     assert.equal(s.el('ce-text').value, 'B文');
 });
 
+test('saving a fallback tab draft does not delete a newer draft held by another tab', async () => {
+    const s = setup();
+    s.bind('book');
+    s.run(`globalThis.sessionStorage={values:new Map(),getItem(key){return this.values.get(key)},
+        setItem(key,value){this.values.set(key,value)},removeItem(key){this.values.delete(key)}};
+        var removedPersistent=0; localStorage.removeItem=()=>removedPersistent++;
+        sortedChapters=[{chapter_number:1,title:'A',full_text:'正式稿'}];
+        refreshProjectContext=async()=>false; openChapterEditModal();
+        var storageKey=chapterDraftKey(captureProjectContext(),1);
+        localStorage.setItem(storageKey, JSON.stringify({text:'另一标签页的草稿'}));`);
+    s.el('ce-text').value = '当前标签页的草稿';
+    s.run('stashChapterDraft()');
+    const saving = s.run('saveChapterEdit()');
+    s.respond(s.requests[0], {});
+    await saving;
+    assert.equal(s.run('removedPersistent'), 0);
+    assert.equal(s.run('sessionStorage.values.has(storageKey)'), false);
+});
+
+test('opening a dialog does not steal focus from an input already selected before the next frame', () => {
+    const s = setup();
+    s.run(`var openingFrame;
+        requestAnimationFrame = run => { openingFrame=run };
+        const dialog = document.getElementById('test-dialog');
+        const mask = document.getElementById('test-mask');
+        const input = document.getElementById('test-input');
+        dialog.contains = element => element === input;
+        mask.querySelector = () => dialog;
+        openModal('test-mask'); input.focus(); openingFrame();`);
+    assert.equal(s.document.activeElement, s.el('test-input'));
+});
+
 test('a conflict preserves unsaved text and keeps the editor open', async () => {
     const s = setup();
     s.bind();
@@ -546,6 +633,25 @@ test('a conflict preserves unsaved text and keeps the editor open', async () => 
     await save;
     assert.equal(s.el('ce-text').value, '不能丢失的输入');
     assert.equal(s.el('modal-chapter').classList.contains('open'), true);
+    assert.equal(s.requests.length, 1);
+});
+
+test('after a rejected save the editor can load the latest official text without dropping the draft', async () => {
+    const s = setup();
+    s.bind('book');
+    s.run(`sortedChapters=[{chapter_number:1,title:'A',full_text:'原正文'}]; openChapterEditModal();
+        ensureChapterLoaded=async()=>{};
+        refreshProjectContext=async()=>{ novelData.revision='b'.repeat(64); novelLoadToken++;
+            sortedChapters=[{chapter_number:1,title:'A',full_text:'新正文'}]; return true; };`);
+    s.el('ce-text').value = '尚未保存的输入';
+    const save = s.run('saveChapterEdit()');
+    s.respond(s.requests[0], {detail:'作品已更新'}, 409);
+    await save;
+    assert.equal(s.el('ce-reload').classList.contains('hidden'), false);
+    await s.run('compareLatestChapterDraft()');
+    assert.equal(s.el('ce-text').value, '尚未保存的输入');
+    assert.match(s.el('ce-conflict-current').textContent, /新正文/);
+    assert.equal(s.el('ce-save').disabled, true);
     assert.equal(s.requests.length, 1);
 });
 
@@ -698,15 +804,27 @@ test('late paragraph candidates never attach to a newer rewrite dialog', async (
     assert.equal(s.el('rw-apply').disabled, true);
 });
 
+test('continuation setup and chapter rewrite review bind their opening project revision', () => {
+    const s = setup();
+    s.bind('sample');
+    s.run("openModal('modal-continuation-plan'); openModal('modal-chapter-rewrite')");
+    for (const id of ['modal-continuation-plan', 'modal-chapter-rewrite']) {
+        assert.equal(s.el(id)._projectContext.novelId, 'sample');
+        assert.equal(s.el(id)._projectContext.revision, 'a'.repeat(64));
+    }
+});
+
 test('regeneration confirmation captures chapter and project before selection changes', async () => {
     const s = setup();
     s.bind('a');
-    s.run('selectedChapterNum=3; confirmRegenerate()');
+    const prepare = s.run('selectedChapterNum=3; confirmRegenerate()');
+    s.respond(s.requests[0], { candidate: null });
+    await prepare;
     s.bind('b');
     s.run('selectedChapterNum=8');
     const confirm = s.run('doConfirm()');
-    assert.deepEqual(JSON.parse(s.requests[0].options.body), {name:'a',chapter:3,expected_revision:'a'.repeat(64)});
-    s.respond(s.requests[0], {});
+    assert.deepEqual(JSON.parse(s.requests[1].options.body), {name:'a',chapter:3,preview:true,expected_revision:'a'.repeat(64)});
+    s.respond(s.requests[1], {});
     await confirm;
 });
 
@@ -791,6 +909,68 @@ test('audit history is escaped and human review advances the bound revision', as
     assert.equal(s.el('human-review-note').value, '');
 });
 
+test('human review drafts are isolated by chapter and by its prose version', async () => {
+    const s = setup();
+    s.bind('book');
+    s.run(`ensureChapterLoaded = async () => {};
+        sortedChapters = [{chapter_number:1,title:'前章',full_text:'第一章',prose_sha256:'first'},
+                          {chapter_number:2,title:'当前章',full_text:'第二章',prose_sha256:'second'}];
+        selectedChapterIdx = 0; selectedChapterNum = 1;`);
+    await s.run('openAuditHistoryModal()');
+    s.el('human-review-note').value = '仅针对第一章';
+    s.el('human-review-decision').value = 'changes_requested';
+    s.run("closeModal('modal-audit-history'); selectedChapterIdx = 1; selectedChapterNum = 2;");
+    await s.run('openAuditHistoryModal()');
+    assert.equal(s.el('human-review-note').value, '');
+    assert.equal(s.el('human-review-decision').value, 'approved');
+    s.run("closeModal('modal-audit-history'); selectedChapterIdx = 0; selectedChapterNum = 1;");
+    await s.run('openAuditHistoryModal()');
+    assert.equal(s.el('human-review-note').value, '仅针对第一章');
+    s.run("closeModal('modal-audit-history'); sortedChapters[0].prose_sha256='changed'");
+    await s.run('openAuditHistoryModal()');
+    assert.equal(s.el('human-review-note').value, '');
+});
+
+test('opening source evidence keeps focus in the same review without changing the chapter', async () => {
+    const s = setup();
+    s.bind('book');
+    s.run(`ensureChapterLoaded = async () => {};
+        sortedChapters = [{chapter_number:1,title:'前章',full_text:'线索就在这里。\\n\\n上下文。'},
+                          {chapter_number:2,title:'当前章',full_text:'第二章'}];
+        selectedChapterIdx = 1; selectedChapterNum = 2;`);
+    await s.run('openAuditHistoryModal()');
+    s.el('human-review-note').value = '继续输入这条意见';
+    await s.run("focusAuditQuote(1,'线索就在这里。')");
+    assert.equal(s.run('selectedChapterNum'), 2);
+    assert.equal(s.el('modal-audit-history').classList.contains('open'), true);
+    assert.equal(s.el('human-review-note').value, '继续输入这条意见');
+    assert.match(s.el('audit-source-text').textContent, /线索就在这里/);
+});
+
+test('the audit summary distinguishes partial retrieval and an unavailable model from a clean book', () => {
+    const s = setup();
+    s.run(`var checked = {chapter_number:7,title:'夜读',final_audit:{stage:'manual',findings:[],evidence_chapters:[2],
+        retrieval_coverage:{eligible_chapters:6,searched_chapters:4,fully_searched_chapters:3,query_truncated:true}}};
+        renderAuditHistory(checked);`);
+    assert.match(s.el('audit-coverage').textContent, /完整检索 3\/6 章/);
+    assert.match(s.el('audit-coverage').textContent, /本章仅部分内容用于检索/);
+    assert.match(s.el('audit-coverage').textContent, /这不是全书通过/);
+    s.run('checked.final_audit.service_error=true; renderAuditHistory(checked)');
+    assert.match(s.el('audit-coverage').textContent, /自动检查未完成/);
+    assert.doesNotMatch(s.el('audit-coverage').textContent, /未发现/);
+});
+
+test('composition keys do not dismiss surfaces or execute palette commands', () => {
+    const s = setup();
+    s.run('setSidebarOpen(true)');
+    let prevented = false;
+    s.document.handlers.get('keydown')[0]({key:'Escape',isComposing:true,preventDefault(){ prevented = true; }});
+    assert.equal(prevented, false);
+    assert.equal(s.el('sidebar').classList.contains('open'), true);
+    s.run("var compositionCommands=0; paletteItems=[{run:()=>compositionCommands++}]; paletteKeydown({key:'Enter',keyCode:229,preventDefault(){},stopPropagation(){}})");
+    assert.equal(s.run('compositionCommands'), 0);
+});
+
 test('late human review acknowledgement never paints a newly selected project', async () => {
     const s = setup();
     s.bind('a');
@@ -843,23 +1023,32 @@ test('status polling backs off while idle and hidden but stays responsive during
     assert.equal(activeTimers.at(-1).delay, 8000);
 });
 
-test('welcome typewriter stops outside the welcome view and resumes when visible', () => {
+test('welcome resumes the last opened project and falls back to the library order', () => {
     const s = setup();
-    s.run('syncHeroTypewriter()');
-    assert.notEqual(s.run('heroTimer'), null);
-    assert.equal(s.el('hero-typing').textContent.length, 1);
+    s.run(`window._novels = [
+        { novel_id: 'new', title: '新作品', total_generated_chapters: 4 },
+        { novel_id: 'recent', title: '再次打开 <书>', total_generated_chapters: 12 },
+    ]`);
+    s.run("localStorage.setItem('moirai_recent_project', 'recent'); renderRecentWork()");
+    assert.match(s.el('recent-work-content').innerHTML, /再次打开 &lt;书&gt;/);
+    assert.match(s.el('recent-work-content').innerHTML, /12 章/);
+    s.run("localStorage.setItem('moirai_recent_project', 'missing'); renderRecentWork()");
+    assert.match(s.el('recent-work-content').innerHTML, /新作品/);
+    s.run('window._novels = []; renderRecentWork()');
+    assert.ok(s.el('recent-work').classList.contains('hidden'));
+    assert.equal(s.el('recent-work-content').innerHTML, '');
+});
 
-    s.el('welcome-view').classList.add('hidden');
-    s.run('syncHeroTypewriter()');
-    assert.equal(s.run('heroTimer'), null);
-
-    s.el('welcome-view').classList.remove('hidden');
-    s.document.hidden = true;
-    s.run('syncHeroTypewriter()');
-    assert.equal(s.run('heroTimer'), null);
-    s.document.hidden = false;
-    s.run('syncHeroTypewriter()');
-    assert.notEqual(s.run('heroTimer'), null);
+test('manuscript preview preserves ordered chapter prose and introductory matter', () => {
+    const s = setup();
+    const source = '卷首独白\r\n\r\n## 第一章 起雾\r\n\r\n长街上没有电。\r\n\r\n潮水还在涨。\r\n# Chapter 2 Crossing\r\n她提灯过桥。';
+    const preview = s.run(`parseManuscript(${JSON.stringify(source)}).map(item => [item.title, item.text])`);
+    assert.deepEqual(JSON.parse(JSON.stringify(preview)), [
+        ['序章', '卷首独白'],
+        ['起雾', '长街上没有电。\n\n潮水还在涨。'],
+        ['Crossing', '她提灯过桥。'],
+    ]);
+    assert.equal(s.run("parseManuscript('单章正文。')[0].text"), '单章正文。');
 });
 
 test('starting task polling requests status immediately instead of waiting for the interval', async () => {
@@ -1081,7 +1270,6 @@ test('sidebar visibility and accessible expansion stay synchronized when selecti
     assert.equal(s.el('sidebar').classList.contains('open'), false);
     assert.equal(s.el('btn-side-toggle').getAttribute('aria-expanded'), 'false');
     s.respond(s.requests[0], detail('a'));
-    s.respond(s.requests[1], {});
     await selected;
 });
 
@@ -1096,6 +1284,23 @@ test('Escape closes an open sidebar and returns focus to its toggle', () => {
     assert.equal(s.document.activeElement, s.el('btn-side-toggle'));
 });
 
+test('a stop request targets only the task that showed the stop button', async () => {
+    const s = setup();
+    const stop = s.el('pipeline-stop');
+    s.run('var polledTask = ""; pollStatus = id => { polledTask = id; }');
+    stop._taskId = 'current-task';
+    const pending = s.run('requestGenerationStop()');
+    assert.equal(stop.disabled, true);
+    assert.equal(s.requests[0].url, '/api/status/current-task/stop');
+    assert.equal(s.requests[0].options.method, 'POST');
+    stop._taskId = 'new-task';
+    stop.textContent = '停止';
+    s.respond(s.requests[0], {status:'stopping'});
+    await pending;
+    assert.equal(stop.textContent, '停止');
+    assert.equal(s.run('polledTask'), '');
+});
+
 test('continuation discloses pending planning, model costs and the server acknowledgement', async () => {
     const s = setup();
     s.bind();
@@ -1107,7 +1312,7 @@ test('continuation discloses pending planning, model costs and the server acknow
     s.run('pollStatus=()=>{}');
     const request = s.run('startContinueGen()');
     assert.deepEqual(JSON.parse(s.requests[0].options.body), {
-        name:'book', count:1, expected_revision:'a'.repeat(64),
+        name:'book', count:1, include_adaptations:false, expected_revision:'a'.repeat(64),
     });
     s.respond(s.requests[0], {message:'将先恢复未完成总纲'});
     await request;
