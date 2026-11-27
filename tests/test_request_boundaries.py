@@ -222,7 +222,7 @@ def test_exact_file_limit_and_upload_stream_reuse(isolated, monkeypatch, size):
     monkeypatch.setattr(limits, "MAX_BACKUP_UPLOAD_BYTES", 4)
     streams = []
 
-    def importer(source, _root):
+    def importer(source, _root, *, warnings):
         assert hasattr(source, "read"), "Pass the existing upload stream, not another file copy"
         assert source.read() == b"x" * 4
         streams.append(source)
@@ -263,7 +263,7 @@ def test_upload_limit_does_not_apply_to_post_body_work(monkeypatch):
 
 
 def test_archive_validation_runs_off_event_loop(isolated, monkeypatch):
-    def importing(*_args):
+    def importing(*_args, warnings):
         with pytest.raises(RuntimeError, match="no running event loop"):
             asyncio.get_running_loop()
         return "book", "Book"

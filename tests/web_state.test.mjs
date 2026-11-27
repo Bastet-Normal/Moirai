@@ -136,6 +136,40 @@ function chapters(numbers, loaded = true) {
     return numbers.map(n => ({chapter_number:n, title:`章节${n}`, word_count:3, volume_number:1, ...(loaded ? {full_text:`正文${n}`} : {})}));
 }
 
+test('changing the version selector always previews the last choice, including after a failed read', async () => {
+    const {run, bind, requests, respond, el} = setup();
+    bind();
+    const mask = el('modal-chapter-versions');
+    mask._projectContext = run('captureProjectContext()');
+    mask._chapter = 1;
+    mask.classList.add('open');
+    const select = el('chapter-version-list');
+    const button = el('chapter-version-restore');
+    const preview = el('chapter-version-previous');
+    const handler = html.match(/<select\b[^>]*id="chapter-version-list"[^>]*onchange="([^"]+)"/)[1];
+    function choose(number) {
+        select.value = number;
+        return run(`(function () { return ${handler}; }).call(document.getElementById('chapter-version-list'))`);
+    }
+    const first = choose('1');
+    const second = choose('2');
+    assert.equal(requests.length, 2);
+    assert.equal(button.disabled, true);
+    respond(requests[1], {revision: mask._projectContext.revision, version: {title:'二', text:'准确的预览'}});
+    await second;
+    respond(requests[0], {detail:'旧请求失败'}, 409);
+    await first;
+    assert.equal(preview.textContent, '二\n\n准确的预览');
+    assert.equal(button.disabled, false);
+    const broken = choose('1');
+    assert.equal(button.disabled, true);
+    assert.ok(!preview.textContent.includes('准确的预览'));
+    respond(requests[2], {detail:'这份历史稿无法读取'}, 409);
+    await broken;
+    assert.equal(preview.textContent, '这份历史稿无法读取');
+    assert.equal(button.disabled, true);
+});
+
 test('editor counts Unicode code points across the shared Han ranges and ignores incomplete pairs', () => {
     const ranges = JSON.parse(readFileSync(new URL('../core/han_repertoire.json', import.meta.url), 'utf8')).ranges;
     const count = vm.runInNewContext(hanCountScript + '\ncountHanCharacters');

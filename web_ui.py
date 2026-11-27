@@ -1254,7 +1254,8 @@ def import_novel(file: Annotated[UploadFile, Depends(backup_upload)]):
     try:
         # A sync endpoint runs in FastAPI's worker pool. Reuse the already
         # bounded upload spool instead of copying another 500 MiB temporary file.
-        src_id, title = import_project_archive(file.file, get_output_dir())
+        warnings: list[str] = []
+        src_id, title = import_project_archive(file.file, get_output_dir(), warnings=warnings)
     except FileExistsError as exc:
         raise HTTPException(status_code=400, detail=f"已存在同名项目: {exc.args[0]}（请先重命名或删除）") from exc
     except InvalidProjectArchive as exc:
@@ -1267,7 +1268,8 @@ def import_novel(file: Annotated[UploadFile, Depends(backup_upload)]):
             status_code=400,
             detail=f"备份文件无效或包含不受支持的数据（诊断编号 {error_id}）",
         ) from exc
-    return {"status": "success", "message": f"已导入《{title}》（{src_id}）", "novel_id": src_id}
+    return {"status": "success", "message": f"已导入《{title}》（{src_id}）",
+            "novel_id": src_id, "title": title, "warnings": warnings}
 
 
 @app.delete("/api/novel/{novel_id}")

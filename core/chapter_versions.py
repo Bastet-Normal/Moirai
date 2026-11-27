@@ -2,21 +2,30 @@
 
 import re
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from pydantic import BaseModel, Field
 
 from core.schemas import ChapterContent
-from core.storage import atomic_write_text, read_json, remove_file
+from core.storage import ProjectReadOnlyError, atomic_write_text, read_json, remove_file
 from core.text_limits import MAX_CHAPTER_TEXT_CHARS
 
 _MAX_VERSIONS = 30
 _VERSION_FILE = re.compile(r"([0-9]{8})\.json")
+_ARCHIVED_VERSION = re.compile(r"chapter_versions/[0-9]{6,}/(?:[0-9a-f]{32}/)?[0-9]{8}\.json")
 
 
 class ChapterVersion(BaseModel):
     title: str
     text: str = Field(max_length=MAX_CHAPTER_TEXT_CHARS)
+
+
+def is_version_record(relative_path: PurePath) -> bool:
+    return _ARCHIVED_VERSION.fullmatch(relative_path.as_posix()) is not None
+
+
+def read_version_record(path: Path) -> ChapterVersion:
+    return ChapterVersion.model_validate(read_json(path, max_bytes=16 * 1024 * 1024))
 
 
 def _version_dir(project_dir: Path, chapter: ChapterContent) -> Path:
@@ -40,9 +49,11 @@ def list_chapter_versions(project_dir: Path, chapter: ChapterContent) -> list[di
 def load_chapter_version(project_dir: Path, chapter: ChapterContent, number: int) -> ChapterVersion | None:
     path = _version_dir(project_dir, chapter) / f"{number:08d}.json"
     try:
-        return ChapterVersion.model_validate(read_json(path, max_bytes=16 * 1024 * 1024))
+        return read_version_record(path)
     except FileNotFoundError:
         return None
+    except (OSError, ValueError, RecursionError) as exc:
+        raise ProjectReadOnlyError("这份历史稿无法读取，请检查作品备份。") from exc
 
 
 def preserve_chapter_version(project_dir: Path, chapter: ChapterContent) -> None:

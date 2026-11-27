@@ -721,3 +721,51 @@ test('a lost append acknowledgement survives reload and later edits target the c
     const result = await (await page.request.get('/api/novel/' + id + '/chapter/2')).json();
     expect(result.chapter.full_text).toBe('改过的回信。');
 });
+
+test('restores the history version previewed after a rapid selection change', async ({studioPage: page}) => {
+    const id = 'history_' + Date.now();
+    const imported = await page.request.post('/api/novels/import_manuscript', {data:{
+        name:id, title:id, chapters:[{title:'渡口', text:'第一稿。'}],
+    }});
+    expect(imported.ok()).toBe(true);
+    await page.goto('/');
+    await page.evaluate(async book => {
+        const base = '/api/novel/' + book;
+        let {revision} = await (await fetch(base + '/chapter/1')).json();
+        for (const text of ['第二稿。', '正式稿。']) {
+            const response = await fetch(base + '/chapter_text', {
+                method:'PATCH', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({chapter:1, text, expected_revision:revision}),
+            });
+            if (!response.ok) throw new Error(await response.text());
+            ({revision} = await response.json());
+        }
+    }, id);
+    await page.getByRole('button', {name:'打开作品：' + id, exact:true}).click();
+    await page.getByRole('button', {name:'编辑本章正文', exact:true}).click();
+    await page.locator('#ce-versions').click();
+    const preview = page.locator('#chapter-version-previous');
+    await expect.poll(() => preview.textContent()).toContain('第二稿。');
+    await page.evaluate(() => {
+        const original = window.fetch;
+        window.fetch = async (...args) => {
+            const response = await original(...args);
+            if (String(args[0]).endsWith('/versions/1')) {
+                window.fetch = original;
+                await new Promise(resolve => { window.releaseVersionResponse = resolve; });
+            }
+            return response;
+        };
+    });
+    const selector = page.locator('#chapter-version-list');
+    await selector.selectOption('1');
+    await expect.poll(() => page.evaluate(() => typeof window.releaseVersionResponse)).toBe('function');
+    await selector.selectOption('2');
+    await expect.poll(() => preview.textContent()).toContain('第二稿。');
+    await page.evaluate(() => window.releaseVersionResponse());
+    await page.locator('#chapter-version-restore').click();
+    await expect.poll(() => page.locator('#confirm-msg').textContent()).toContain('版本 2');
+    await page.locator('#confirm-go').click();
+    await expect.poll(async () => (await (await page.request.get('/api/novel/' + id + '/chapter/1')).json()).chapter.full_text)
+        .toBe('第二稿。');
+});
