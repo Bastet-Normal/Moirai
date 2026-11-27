@@ -36,12 +36,20 @@ pipeline/novel_pipeline.py              workflow orchestration
              ├── semantic_memory.py     deterministic Chinese recall
              └── knowledge_graph.py     entity and relation model
 
-web/index.html                           browser UI
-web/assets/                              checked-in offline CSS/JS/fonts
+web/index.html                           workspace, chapter editor and review UI
+web/assets/entity-graph.js               entity symbols, layout, zoom and relationship selection
+web/assets/                              local styles, scripts, fonts and artwork
 novel_projects/<id>/                     user-owned project data
 ```
 
 `web_ui.py` is now the HTTP composition layer. It no longer embeds the full HTML/JavaScript application or owns the generation workflow. Read-only operations instantiate `NovelPipeline` cheaply because agents and the LLM client are lazy-loaded. Project lists and workspace details use chapter metadata only; the reader fetches one chapter body on demand.
+
+The graph consumes the workspace's versioned Cytoscape data and owns its canvas instance.
+Character cards reuse its portrait mapping. Filtering, zoom and selection stay in the browser.
+Editing world or character information goes through the project API and the normal revision checks.
+The desk requests a short opening excerpt for its latest-chapter preview. Opening the chapter
+loads its full text. Paragraph edits identify the visible paragraph by index and compare its source
+text, so identical passages can be edited independently while preserving the surrounding whitespace.
 
 ## Download snapshots and publication files
 
@@ -425,6 +433,11 @@ reporting a false zero-risk result or overwriting the file with an empty diction
 ## Deployment boundary
 
 The current product is a local, single-user authoring application. The server deliberately refuses non-loopback binding because its API can edit projects and configure an API key. Host and Origin checks also reject DNS-rebinding and cross-site browser requests; security headers prevent framing and permit only local scripts/styles/fonts, including on rejected requests. Stateful responses are marked `no-store`/`no-cache`: a cached bookshelf, revision, task state or recovery decision must never outlive the underlying files. Tailwind output, Cytoscape and Font Awesome assets are versioned under `web/assets/`, so the UI has no runtime CDN dependency. If the product becomes multi-user, the correct next architecture is a database plus object storage, authenticated APIs and a durable external job queue—not additional global dictionaries or filesystem locks.
+
+Release artifacts are ZIPs built by `scripts/package_release.py` and distributed through GitHub Releases.
+The archive includes the launcher, locked runtime requirements, application and offline assets.
+The launcher starts either the local library or a disposable demo. Browser drafts belong to their
+browser origin. Formal manuscripts and history belong to the configured project directory.
 
 ## Verification
 

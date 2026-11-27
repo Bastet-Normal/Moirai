@@ -8,7 +8,7 @@ class EntityNode(BaseModel):
     """知识图谱实体节点"""
     id: str
     name: str
-    entity_type: str = Field("CHARACTER", description="CHARACTER / FACTION / ITEM / LOCATION / SECRET / EVENT")
+    entity_type: str = Field("CHARACTER", description="CHARACTER / FACTION / ITEM / LOCATION / SECRET / EVENT / OTHER")
     properties: dict[str, Any] = Field(default_factory=dict)
     first_seen_chapter: int = 1
     status: str = Field("ACTIVE", description="ACTIVE / DEAD / DESTROYED / RESOLVED")
@@ -29,28 +29,34 @@ class KnowledgeGraph(BaseModel):
     nodes: dict[str, EntityNode] = Field(default_factory=dict)
     edges: list[RelationEdge] = Field(default_factory=list)
 
-    def upsert_node(self, name: str, entity_type: str = "CHARACTER", properties: dict[str, Any] | None = None, chapter: int = 1):
+    def upsert_node(self, name: str, entity_type: str | None = None, properties: dict[str, Any] | None = None, chapter: int = 1):
         """插入或更新实体节点"""
         if name not in self.nodes:
             self.nodes[name] = EntityNode(
                 # Stable across prune/reload and immune to sequential-ID reuse.
                 id=f"ent_{hashlib.sha256(name.encode('utf-8')).hexdigest()[:16]}",
                 name=name,
-                entity_type=entity_type,
+                entity_type=entity_type or "CHARACTER",
                 properties=properties or {},
                 first_seen_chapter=chapter,
             )
         else:
+            node = self.nodes[name]
+            # Older relationship-only nodes were saved as characters with no properties.
+            if entity_type and entity_type != "OTHER" and (
+                node.entity_type == "OTHER" or (node.entity_type == "CHARACTER" and not node.properties)
+            ):
+                node.entity_type = entity_type
             if properties:
-                self.nodes[name].properties.update(properties)
+                node.properties.update(properties)
 
     def add_relation(self, source: str, target: str, rel_type: str, description: str = "", chapter: int = 1):
         """添加或更新实体关系"""
         # 确保端点存在
         if source not in self.nodes:
-            self.upsert_node(source, "CHARACTER", chapter=chapter)
+            self.upsert_node(source, "OTHER", chapter=chapter)
         if target not in self.nodes:
-            self.upsert_node(target, "CHARACTER", chapter=chapter)
+            self.upsert_node(target, "OTHER", chapter=chapter)
 
         # 检查是否已存在同类型活跃关系
         for e in self.edges:

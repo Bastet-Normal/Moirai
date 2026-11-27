@@ -46,6 +46,7 @@ from api.schemas import (
     RegenerateRequest,
     RenameRequest,
     RollbackRequest,
+    WorldBackgroundRequest,
 )
 from config.compliance_words import (
     COMPLIANCE_CATEGORIES,
@@ -95,7 +96,7 @@ from core.schemas import (
 from core.state_manager import ChapterContextError, StateManager
 from core.storage import ProjectBusyError, ProjectConflictError, ProjectReadOnlyError, project_lock, remove_file
 from core.task_status import TaskAlreadyRunning, generation_status
-from core.text_limits import ChapterTextLimitError, check_chapter_length, check_replacement_length
+from core.text_limits import ChapterTextLimitError, check_chapter_length, check_replacement_length, replace_paragraph_at
 from pipeline.novel_pipeline import NovelPipeline
 from services.generation_jobs import (
     run_audio_package_job,
@@ -387,14 +388,22 @@ def get_novel_detail(novel_id: str):
 
 
 @app.get("/api/novel/{novel_id}/chapter/{chapter_num}")
-def get_chapter_detail(novel_id: str, chapter_num: int):
+def get_chapter_detail(novel_id: str, chapter_num: int, preview: bool = False):
     _require_project(novel_id)
     if chapter_num < 1:
         raise HTTPException(status_code=400, detail="章节序号必须 ≥ 1")
     chapter, revision = StateManager.read_project_chapter_versioned(novel_id, chapter_num)
     if not chapter:
         raise HTTPException(status_code=404, detail=f"章节不存在: 第 {chapter_num} 章")
-    return {"chapter": chapter.model_dump(), "revision": revision, "novel_id": novel_id}
+    if preview:
+        prose = chapter.full_text.lstrip()
+        excerpt = prose[:160].split("\n\n", 1)[0].rstrip()
+        if len(excerpt) < len(prose):
+            excerpt += "…"
+        payload = {"chapter_number": chapter_num, "title": chapter.title, "excerpt": excerpt}
+    else:
+        payload = chapter.model_dump()
+    return {"chapter": payload, "revision": revision, "novel_id": novel_id}
 
 
 @app.get("/api/novel/{novel_id}/search")
@@ -765,15 +774,12 @@ def patch_paragraph(req: PatchParagraphRequest):
         raise HTTPException(status_code=400, detail="目标段落内容不能为空")
     pipeline = NovelPipeline(novel_id=req.name)
     _check_revision(pipeline.state_manager, req.expected_revision)
-    chapter = pipeline.state_manager.state.chapters.get(req.chapter)
-    if chapter and req.old_text in chapter.full_text:
-        check_replacement_length(chapter.full_text, req.old_text, req.new_text, count=1)
     ok = pipeline.state_manager.patch_paragraph(
-        req.chapter, req.old_text, req.new_text, mark_reconciliation=True
+        req.chapter, req.old_text, req.new_text, paragraph_index=req.paragraph_index, mark_reconciliation=True,
     )
     if not ok:
-        raise HTTPException(status_code=400, detail="未找到目标段落内容，修改失败！")
-    return {"status": "success", "message": "段落已精准微手术更新！"}
+        raise HTTPException(status_code=400, detail="目标段落与打开时不一致，请重新打开该段核对")
+    return {"status": "success", "message": "段落修改已保存"}
 
 
 @app.post("/api/novel/rollback")
@@ -807,6 +813,32 @@ def update_concept(novel_id: str, req: ConceptUpdateRequest):
             setattr(concept, field, value.strip())
     pipeline.state_manager.set_concept(concept)
     return {"status": "success", "message": "策划案已更新"}
+
+
+@app.patch("/api/novel/{novel_id}/world")
+def save_world_background(novel_id: str, req: WorldBackgroundRequest):
+    _ensure_idle()
+    _require_project(novel_id)
+    manager = StateManager(novel_id)
+    _check_revision(manager, req.expected_revision)
+    state = manager.state
+    if not state.concept or state.pending_initial_planning or state.pending_outline_plan:
+        raise ProjectConflictError("请先完成作品策划，再编辑世界背景")
+    current = state.world_setting
+    if current and req.world_name is not None and current.world_name != req.world_name:
+        raise ProjectConflictError("世界名称已用于关联图谱，请保留当前名称")
+    if current:
+        world = current.model_copy(update={"geography_overview": req.geography_overview})
+    else:
+        if not req.world_name:
+            raise HTTPException(status_code=422, detail="请填写世界名称")
+        node = manager.knowledge_graph.nodes.get(req.world_name)
+        if node and node.entity_type != "LOCATION":
+            raise ProjectConflictError("世界名称与现有实体同名，请换一个名称")
+        world = WorldSetting(world_name=req.world_name, geography_overview=req.geography_overview)
+    if world != current:
+        manager.set_world_setting(world)
+    return {"revision": manager.revision}
 
 
 @app.patch("/api/novel/{novel_id}/character")
@@ -1498,15 +1530,11 @@ def para_rewrite_apply(novel_id: str, req: ParaRewriteApplyRequest):
         raise HTTPException(status_code=404, detail=f"章节不存在: 第 {req.chapter} 章")
     if not req.new_text.strip():
         raise HTTPException(status_code=400, detail="重写内容不能为空")
-    paragraphs = [p for p in chap.full_text.split("\n\n") if p.strip()]
-    if req.paragraph_index < 0 or req.paragraph_index >= len(paragraphs):
-        raise HTTPException(status_code=400, detail=f"段落序号越界: {req.paragraph_index}")
     _check_revision(pipeline.state_manager, req.expected_revision)
-    paragraphs[req.paragraph_index] = req.new_text.strip()
-    check_chapter_length(sum(map(len, paragraphs)) + 2 * (len(paragraphs) - 1))
-    pipeline.state_manager.replace_chapter_text(
-        req.chapter, "\n\n".join(paragraphs), mark_reconciliation=True
-    )
+    updated = replace_paragraph_at(chap.full_text, req.paragraph_index, req.new_text.strip())
+    if updated is None:
+        raise HTTPException(status_code=400, detail=f"段落序号越界: {req.paragraph_index}")
+    pipeline.state_manager.replace_chapter_text(req.chapter, updated, mark_reconciliation=True)
     return {"status": "success", "message": "段落已重写并入库"}
 
 

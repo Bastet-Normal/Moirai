@@ -182,6 +182,38 @@ def _offline_write_beat(_agent, beat, chapter_title, chapter_number, **_kwargs):
     ))
 
 
+_HARBOR_CHAPTERS = (
+    ("退信", """雾退到第三盏码头灯时，林岚才看清窗缝里那封信。远处的灯火还在水上晃，信纸却晒得温热，像刚从谁的贴身口袋里拿出来。
+
+封口按着一枚蓝色邮戳。她用指腹摸了一遍，认出是旧港的钟楼。钟楼拆掉那年，她刚上小学。
+
+收信人写着她母亲的名字。地址倒是没错，连门牌上褪色的半个“七”字都照着描了下来。
+
+她没拆，先去问楼下卖鱼的阿婆。阿婆正用剪刀修一张破网，抬头瞥了一眼，说今天第一班渡船还没靠岸。
+
+“是从屋里塞出去的吧？”阿婆说。
+
+林岚回到楼上，沿窗框找。木刺向外翻，挂着一点毛线。她昨天晾在屋里的围巾少了一针。
+
+信封里没有纸张摩擦的响声。她把它举向晨光，一把小钥匙的影子从母亲的名字上滑了过去。
+
+抽屉最底下还有一串旧钥匙。母亲每次离港都会拿走其中一把，回来再挂上。最后一次，钩子空了十七年。
+
+楼下响起短短一声船笛。她把外套披在睡衣外头，连鞋带都没来得及系紧。
+
+等她跑到栈桥尽头，渡船已经离岸。留在木板上的只有一只空竹篮，篮底压着她家那把备用钥匙。"""),
+    ("潮汐表背面", """那年冬天的潮汐表还钉在售票亭里。林岚把纸掀起来，背面是一行母亲的字：等水落下去，再看桥底。
+
+她坐在长椅上等。雾里有橹声，一下近，一下远。卖票的人把窗口推开一条缝，递给她一杯热水。
+
+“她也坐过这儿。”他说，低头继续数零钱。
+
+水面慢慢退到桥墩下的白漆线。木板底下露出一只铁皮盒，粗麻绳已经泡成了和泥一样的颜色。
+
+她试了信封里的钥匙。锁簧轻轻跳了一下。盒里一叠旧船票，从十七年前起，每张都是往返票，每张都只撕去了一半。"""),
+)
+
+
 _SAMPLE_BEFORE = "沈星将信标钥匙留在只有南薇能打开的玻璃匣里。"
 _SAMPLE_AFTER = "沈星伸手一摸，信标钥匙一直揣在她自己的大衣口袋里。"
 
@@ -293,17 +325,29 @@ def _offline_branch_simulation(
     from core.narrative_brancher import BranchingSimulationResult, PlotBranchCandidate
 
     protagonist = characters[0].name if characters else "守夜人"
+    location = world_setting.world_name if world_setting else "港口"
     return BranchingSimulationResult(
-        decision_point_description=(
-            f"{protagonist}在{world_setting.world_name}核验第 {chapter_number} 章线索：{current_situation}"
-        ),
-        candidates=[PlotBranchCandidate(
-            branch_id="A",
-            branch_title="封锁旧观测站",
-            narrative_strategy=f"沿《{novel_concept.title}》的纸质航图封锁异常航路，并公开设备记录。",
-            immediate_conflict="控制塔要求立刻销毁原始记录。",
-            recommendation_reason="证据链清晰，也能保留下一章追查空间。",
-        )],
+        decision_point_description=f"{protagonist}在{location}核验第 {chapter_number} 章线索：{current_situation}",
+        candidates=[
+            PlotBranchCandidate(
+                branch_id="A", branch_title="封锁旧观测站",
+                narrative_strategy=f"沿《{novel_concept.title}》留下的线索封锁入口，公开原始记录。",
+                immediate_conflict="控制塔要求立刻销毁记录。",
+                recommendation_reason="证据链清晰，也给下一章留下追查的空间。",
+            ),
+            PlotBranchCandidate(
+                branch_id="B", branch_title="借出一份假记录",
+                narrative_strategy="把两份略有差别的抄本交给不同证人，从回信措辞判断谁在泄密。",
+                immediate_conflict="一名证人认出了抄本上的假签名。",
+                recommendation_reason="能从人物关系展开调查，但会消耗证人的信任。",
+            ),
+            PlotBranchCandidate(
+                branch_id="C", branch_title="追随最后一班夜渡",
+                narrative_strategy="放弃在岸边等候，带着记录登船，去找当晚唯一的目击者。",
+                immediate_conflict="回港前，保管记录的箱子被调换。",
+                recommendation_reason="可以引出新的地点，代价是暂时失去现有证据。",
+            ),
+        ],
         selected_branch_id="A",
     )
 
@@ -324,6 +368,34 @@ def _offline_delivery_package(_agent, concept, world_setting, protagonist, first
             "角色立绘": f"{protagonist.name}, night watch uniform, antique compass, restrained sci-fi mystery",
         },
         marketing_blurbs=["断电星港里，只有纸质航图不会说谎。", "不存在的航路，寄来了真实的求救信。"],
+    )
+
+
+def _star_route_outline():
+    from core.schemas import ChapterOutline, GlobalOutline, VolumeChapterRange, VolumeOutline
+
+    opening = ChapterOutline(
+        chapter_number=1, volume_number=1, title="玻璃匣",
+        summary="停电前，南薇发现匣底的编号与失踪航线一致。",
+        main_conflict="玻璃匣即将被收回，南薇必须决定是否打开它。",
+        expectation_hook="旧航线上还有一盏亮着的灯。",
+        involved_character_names=["沈星", "南薇"],
+    )
+    beacon = ChapterOutline(
+        chapter_number=3, volume_number=1, title="雾中信标",
+        summary="沈星追着雾里的灯号出港，南薇留在岸上校对最后一段坐标。",
+        main_conflict="两份星图把同一座信标标在不同位置。",
+        expectation_hook="灯号中夹着一段失踪船员的呼叫。",
+        involved_character_names=["沈星", "南薇"],
+    )
+    return GlobalOutline(
+        novel_title="群星航路", main_theme="沈星和南薇试图把一条从星图上消失的航路找回来。",
+        total_volumes=1, final_climax="两人在雾散之前重新点亮信标，让失航的船找到归路。",
+        volumes=[VolumeOutline(
+            volume_number=1, volume_title="失落的航标", volume_goal="查清玻璃匣底编号的来历。",
+            main_antagonist="被反复改写的港口档案", volume_climax="两人凭旧星图和灯号交叉确认信标的位置。",
+            chapter_range=VolumeChapterRange(start=1, end=3), chapters=[opening, beacon],
+        )],
     )
 
 
@@ -367,7 +439,7 @@ def demo_environment(directory: Path):
         from core.multimodal_generator import MultimodalGenerator
         from core.narrative_brancher import NarrativeBrancher
         from core.reader_simulator import ReaderSimulator
-        from core.schemas import ChapterContent, CharacterCard, CharacterState, NovelConcept
+        from core.schemas import ChapterContent, CharacterCard, CharacterState, ForeshadowingRecord, NovelConcept
         from core.state_manager import StateManager
 
         # Assets/HTML are already bound to the source tree. Only the config write
@@ -388,27 +460,53 @@ def demo_environment(directory: Path):
             patch.object(CommercialDeliveryAgent, "generate_delivery_package", _offline_delivery_package),
         ):
             try:
-                for novel_id, title in (("demo_alpha", "雾港来信"), ("demo_beta", "群星航路")):
+                for novel_id, title, logline in (
+                    ("demo_alpha", "雾港来信", "林岚在窗缝里捡到一封寄给母亲的信，邮戳上的钟楼在她上小学那年就拆了。"),
+                    ("demo_beta", "群星航路", "星图上的旧航线早已消失，沈星和南薇却在一只玻璃匣底找到了它的编号。"),
+                ):
                     manager = StateManager(novel_id)
                     manager.set_concept(NovelConcept(
-                        title=title, genre="离线演示", logline="用于界面与编辑验收的临时作品。",
+                        title=title, genre="离线演示", logline=logline,
                         golden_finger="演示数据，不调用模型。", core_conflict="所有修改仅保存到临时目录。",
                     ))
                     manager.upsert_character(CharacterCard(
                         id=f"{novel_id}_hero", name="林岚" if novel_id == "demo_alpha" else "沈星",
-                        role="主角", background="用于核对历史状态修复流程的离线示例人物。",
+                        role="主角",
+                        background=(
+                            "她认出了信封上的钟楼，那座楼在她上小学那年就拆了。"
+                            if novel_id == "demo_alpha" else "天文台停电前，沈星请南薇校对最后一份星图。"
+                        ),
                         initial_state=CharacterState(
                             level="凡人", location="启程地", hp_status="健康",
                             equipment_and_items=["旧信笺"], current_mood="警觉",
                         ),
+                        current_state=CharacterState(location="码头") if novel_id == "demo_beta" else CharacterState(),
                     ))
+                    if novel_id == "demo_beta":
+                        manager.upsert_character(CharacterCard(
+                            id="demo_beta_nanwei", name="南薇", role="星图校对员",
+                            background="她是唯一能打开玻璃匣的人。",
+                            initial_state=CharacterState(location="天文台"),
+                            current_state=CharacterState(location="天文台", current_mood="专注"),
+                        ))
+                        graph = manager.knowledge_graph
+                        for name, kind in (("天文台", "LOCATION"), ("星图", "ITEM"), ("玻璃匣", "ITEM"),
+                                           ("信标钥匙", "ITEM"), ("旧航线之谜", "SECRET")):
+                            graph.upsert_node(name, kind)
+                        for source, relation, target in (
+                            ("沈星", "委托", "南薇"), ("沈星", "到访", "天文台"),
+                            ("南薇", "校对", "星图"), ("南薇", "能打开", "玻璃匣"),
+                            ("信标钥匙", "封存于", "玻璃匣"), ("玻璃匣", "编号指向", "旧航线之谜"),
+                        ):
+                            graph.add_relation(source, target, relation)
+                        manager.save_state()
+                        manager.set_global_outline(_star_route_outline())
+                        manager.create_snapshot(0)
                     for number in (1, 2):
-                        body = "\n\n".join(
-                            f"第 {i + 1} 段。{title}的主人公推开窗，远处的灯火映在雾里。"
-                            "这是一段离线验收用的示例正文，可以编辑、回滚或删除。"
-                            for i in range(18)
-                        )
-                        if novel_id == "demo_beta":
+                        if novel_id == "demo_alpha":
+                            chapter_title, body = _HARBOR_CHAPTERS[number - 1]
+                        else:
+                            chapter_title = "玻璃匣" if number == 1 else "码头夜潮"
                             body = (
                                 "天文台停电前，沈星请南薇检查最后一份星图。\n\n"
                                 + _SAMPLE_BEFORE + "\n\n匣底的编号与消失的旧航线一致。"
@@ -417,9 +515,17 @@ def demo_environment(directory: Path):
                                 + _SAMPLE_AFTER + "\n\n信标就在雾中。"
                             )
                         manager.save_chapter(ChapterContent(
-                            chapter_number=number, volume_number=1, title=f"旅程 {number}",
+                            chapter_number=number, volume_number=1, title=chapter_title,
                             full_text=body, word_count=len(body), beats_raw_text=[], cliffhanger_ending="",
                         ))
+                        if novel_id == "demo_beta":
+                            if number == 1:
+                                manager.upsert_foreshadowing(ForeshadowingRecord(
+                                    hook_id="route-number", title="旧航线之谜", status="DEVELOPING",
+                                    description="玻璃匣底的编号，与港口已经撤下的旧航线一致。",
+                                    planted_chapter=1, expected_resolution_volume=1,
+                                ))
+                            manager.create_snapshot(number)
                 yield web_ui.app
             finally:
                 reset_llm_client()

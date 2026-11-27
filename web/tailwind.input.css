@@ -1,5 +1,6 @@
 @import "tailwindcss" source(none);
 @source "./index.html";
+@source "./assets/entity-graph.js";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

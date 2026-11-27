@@ -23,8 +23,8 @@ export async function launchSafari() {
     const [dx, dy] = await driver.executeScript('return [outerWidth-innerWidth,outerHeight-innerHeight]')
     await driver.manage().window().setRect({x:0,y:0,width:viewport.width+dx,height:viewport.height+dy})
     function selector(steps) {
-      async function matches() {
-        return driver.executeScript(function (steps) {
+      async function matches(result = 'elements') {
+        return driver.executeScript(function (steps, result) {
           let roots = [document.body]
           for (const {type, value, regexp, exact, level} of steps) {
             const name = regexp ? new RegExp(value) : value
@@ -38,8 +38,8 @@ export async function launchSafari() {
               return TestingLibraryDom.queryAllByRole(root,type,{name,level})
             })
           }
-          return roots
-        }, steps)
+          return result === 'count' ? roots.length : roots
+        }, steps, result)
       }
       const first = async () => driver.wait(async () => (await matches())[0], 5000, JSON.stringify(steps))
       return {
@@ -57,6 +57,7 @@ export async function launchSafari() {
         async click() {
           const el = await first()
           await driver.wait(() => driver.executeScript(function(el) {
+            if (el.matches(':disabled') || el.closest('[inert]')) return false
             el.scrollIntoView({block:'center',behavior:'instant'})
             const r=el.getBoundingClientRect()
             return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))
@@ -81,7 +82,7 @@ export async function launchSafari() {
             input.dispatchEvent(new Event('change', {bubbles: true}))
           }, await first(), name, mimeType, buffer.toString('base64'))
         },
-        count: async () => (await matches()).length,
+        count: () => matches('count'),
         textContent: async () => (await first()).getProperty('textContent'),
         allTextContents: async () => Promise.all((await matches()).map(el => el.getProperty('textContent'))),
         getAttribute: async name => (await first()).getAttribute(name),

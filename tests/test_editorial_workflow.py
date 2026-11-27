@@ -18,6 +18,7 @@ from core.chapter_drafts import ChapterDraft, ChapterRewrite, store_chapter_rewr
 from core.llm import LLMClient
 from core.manuscript_docx import DOCX_MEDIA_TYPE, read_docx
 from core.manuscript_facts import ManuscriptFacts
+from core.narrative_brancher import BranchingSimulationResult
 from core.schemas import (
     AuditFinding,
     AuditReport,
@@ -61,6 +62,46 @@ def import_book(client):
     })
     assert response.status_code == 201, response.text
     return StateManager("book")
+
+
+def test_world_background_is_revision_bound_and_preserves_other_setting_data(studio):
+    manager = import_book(studio)
+    url = "/api/novel/book/world"
+    first = {"world_name": "雾港", "geography_overview": "山间港口。"}
+    assert studio.patch(url, json=first).status_code == 428
+    first["expected_revision"] = manager.revision
+    saved = studio.patch(url, json=first)
+    assert saved.status_code == 200, saved.text
+    assert studio.patch(url, json=first).status_code == 409
+    manager = StateManager("book")
+    world = manager.state.world_setting.model_copy(update={"special_rules": ["满潮闭港"]})
+    manager.set_world_setting(world)
+    update = {"expected_revision": manager.revision, "geography_overview": "海峡以北。"}
+    assert studio.patch(url, json={**update, "geography_overview": "   "}).status_code == 422
+    assert studio.patch(url, json=update).status_code == 200
+    assert StateManager("book").state.world_setting == world.model_copy(update={"geography_overview": "海峡以北。"})
+
+
+def test_branch_without_outline_uses_bounded_prose_from_the_selected_chapter(studio):
+    book = import_book(studio)
+    book.replace_chapter_text(1, "头" * 600 + "不送出的中段" + "尾" * 600)
+    pipeline = NovelPipeline(book.novel_id)
+    brancher = Mock()
+    brancher.simulate_branches.return_value = BranchingSimulationResult(decision_point_description="测试")
+    pipeline.__dict__["narrative_brancher"] = brancher
+    pipeline.simulate_chapter_branching(1)
+    situation = brancher.simulate_branches.call_args.kwargs["current_situation"]
+    assert "《有雾》" in situation and "不送出的中段" not in situation
+    assert situation.endswith("头" * 600 + "\n…\n" + "尾" * 600)
+
+
+def test_desk_preview_omits_full_prose_and_preserves_the_revision(studio):
+    manager = import_book(studio)
+    manager.replace_chapter_text(3, "雨" * 200 + "\n\n新的线索")
+    view = studio.get("/api/novel/book/chapter/3?preview=true").json()
+    assert view["revision"] == manager.revision
+    assert view["chapter"] == {"chapter_number": 3, "title": "回到档案馆", "excerpt": "雨" * 160 + "…"}
+    assert studio.get("/api/novel/book/chapter/3").json()["chapter"]["full_text"].endswith("新的线索")
 
 
 def test_docx_round_trip_preview_and_split_txt_is_read_only(studio):
