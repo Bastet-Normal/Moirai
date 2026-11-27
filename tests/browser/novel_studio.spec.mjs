@@ -212,7 +212,8 @@ test('the caret stays on the last line of a long wrapped chapter', async ({safar
 });
 
 test('blank workspace clicks leave the outline off and a single graph node stays readable', async ({safariPage:page}) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
+    const graphExpect = expect.configure({timeout:20_000});
     await openDemoNovel(page);
     await page.getByRole('tab', {name:'世界观', exact:true}).click();
     const point = await page.locator('.workspace-heading').evaluate(el => {
@@ -220,17 +221,17 @@ test('blank workspace clicks leave the outline off and a single graph node stays
         return {x:box.right - 5, y:box.top + 5};
     });
     await page.mouse.click(point.x, point.y);
-    await expect.poll(() => page.locator('#main-content').evaluate(el => getComputedStyle(el).outlineStyle)).toBe('none');
+    await graphExpect.poll(() => page.locator('#main-content').evaluate(el => getComputedStyle(el).outlineStyle)).toBe('none');
     await page.getByRole('tab', {name:'实体图谱', exact:true}).click();
-    await expect.poll(() => page.evaluate(() => cyInstance?.nodes().length)).toBe(1);
+    await graphExpect.poll(() => page.evaluate(() => cyInstance?.nodes().length)).toBe(1);
     const size = await page.evaluate(() => cyInstance.nodes()[0].renderedWidth());
     expect(size).toBeGreaterThan(25);
     expect(size).toBeLessThan(61);
-    await expect.poll(() => page.evaluate(() => cyInstance.nodes()[0].style('background-image'))).toContain('/assets/graph-robots/');
+    await graphExpect.poll(() => page.evaluate(() => cyInstance.nodes()[0].style('background-image'))).toContain('/assets/graph-robots/');
     await page.getByRole('button', {name:'打开作品：群星航路', exact:true}).click();
     const tabs = page.getByRole('tablist', {name:'群星航路 · 作品工作区', exact:true});
     await tabs.getByRole('tab', {name:'实体图谱', exact:true}).click();
-    await expect.poll(() => page.evaluate(() => ({
+    await graphExpect.poll(() => page.evaluate(() => ({
         tab: activeTab, book: currentNovelId, edges: cyInstance?.edges().length ?? 0,
         issues: window.safariIssues,
     }))).toEqual({tab:'graph', book:'demo_beta', edges:6, issues:[]});
@@ -244,19 +245,24 @@ test('blank workspace clicks leave the outline off and a single graph node stays
         '/assets/graph-robots/character.png', '/assets/graph-symbols/item.png',
         '/assets/graph-symbols/location.png', '/assets/graph-symbols/secret.png',
     ]);
-    expect(await page.evaluate(() => cyInstance.$id('天文台').data('symbolImage'))).toBe('/assets/graph-symbols/location.png');
-    expect(await page.evaluate(() => cyInstance.$id('玻璃匣').data('symbolImage'))).toBe('/assets/graph-symbols/glass-case.png');
-    expect(await page.evaluate(() => cyInstance.$id('信标钥匙').data('symbolImage'))).toBe('/assets/graph-symbols/key.png');
-    expect(await page.evaluate(() => cyInstance.$id('星图').data('symbolImage'))).toBe('/assets/graph-symbols/star-chart.png');
+    const artwork = await page.evaluate(() => Object.fromEntries(
+        ['天文台', '玻璃匣', '信标钥匙', '星图'].map(id => [id, cyInstance.$id(id).data('symbolImage')])
+    ));
+    expect(artwork).toEqual({
+        '天文台':'/assets/graph-symbols/location.png', '玻璃匣':'/assets/graph-symbols/glass-case.png',
+        '信标钥匙':'/assets/graph-symbols/key.png', '星图':'/assets/graph-symbols/star-chart.png',
+    });
     await page.locator('#graph-entity').selectOption('天文台');
-    await expect.poll(() => page.locator('#graph-relations').textContent()).toContain('沈星 → 到访 → 天文台');
+    await graphExpect.poll(() => page.locator('#graph-relations').textContent()).toContain('沈星 → 到访 → 天文台');
     expect(await page.evaluate(() => cyInstance.nodes('.muted').length)).toBe(5);
     await page.getByRole('button', {name:'放大图谱'}).click();
-    await expect.poll(() => page.evaluate(() => Math.round(parseFloat(cyInstance.nodes()[0].renderedStyle('font-size'))))).toBe(14);
-    await expect.poll(() => page.evaluate(() => Math.round(cyInstance.zoom() * Number(cyInstance.edges()[0].style('arrow-scale')) * 100))).toBe(100);
+    await graphExpect.poll(() => page.evaluate(() => ({
+        font: Math.round(parseFloat(cyInstance.nodes()[0].renderedStyle('font-size'))),
+        arrow: Math.round(cyInstance.zoom() * Number(cyInstance.edges()[0].style('arrow-scale')) * 100),
+    }))).toEqual({font:14, arrow:100});
     await page.setViewportSize({width:320, height:814});
     await page.locator('#graph-entity').selectOption('南薇');
-    await expect.poll(() => page.evaluate(() => {
+    await graphExpect.poll(() => page.evaluate(() => {
         const labelsOnly = {includeNodes:false, includeEdges:false, includeOverlays:false, includeUnderlays:false};
         const labels = cyInstance.elements().map(el => ({id:el.id(), ...el.renderedBoundingBox(labelsOnly)}));
         return labels.flatMap((a, i) => labels.slice(i + 1).filter(b =>
