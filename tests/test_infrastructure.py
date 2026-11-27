@@ -1,10 +1,14 @@
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 from agents.outline_architect import OutlineExtension
 from core.env_file import update_env_file
@@ -28,6 +32,19 @@ from core.state_manager import StateManager
 from core.storage import atomic_write_bytes, atomic_write_text, project_lock, read_json
 from core.task_status import GenerationTaskStatus, TaskAlreadyRunning, TaskReservationMismatch
 from pipeline.novel_pipeline import NovelPipeline
+
+
+def test_core_storage_can_start_without_installed_model_dependencies():
+    subprocess.run([sys.executable, "-S", "-c", "from core.storage import project_lock"],
+                   cwd=Path(__file__).resolve().parents[1], check=True, timeout=20)
+    import core
+    from core import LLMClient
+    from core.llm import LLMClient as client_type
+
+    assert LLMClient is client_type
+    assert core.StateManager is StateManager
+    assert core.NovelProjectState is NovelProjectState
+    assert set(core.__all__).issubset(dir(core))
 
 
 class TestAtomicStorage(unittest.TestCase):
@@ -283,7 +300,7 @@ def test_lightweight_load_only_reads_prose_for_missing_metadata(tmp_path):
     for number in range(1, 4):
         manager.append_manual_chapter(f"第{number}章", f"正文{number}")
     (manager.chapter_meta_dir / "chapter_002.json").unlink()
-    with patch("core.state_manager.read_json", wraps=read_json) as reads:
+    with patch("core.chapter_store.read_json", wraps=read_json) as reads:
         loaded = StateManager("lightweight", base_dir=str(tmp_path), load_chapter_content=False, load_memory=False)
     body_reads = [
         call.args[0].name for call in reads.call_args_list if call.args[0].parent == manager.chapters_dir
@@ -302,6 +319,43 @@ def test_on_demand_reader_supports_legacy_aggregate(tmp_path):
     loaded, revision = StateManager.read_project_chapter_versioned("legacy", 1, str(tmp_path))
     assert loaded == chapter
     assert revision == StateManager("legacy", base_dir=str(tmp_path)).revision
+
+
+def test_editing_a_mixed_legacy_book_migrates_untouched_prose_atomically(tmp_path, monkeypatch):
+    root = tmp_path / "legacy"
+    (root / "chapters").mkdir(parents=True)
+    chapters = {n: ChapterContent(chapter_number=n, volume_number=1, title=f"标题{n}", full_text=f"原文{n}")
+                for n in (1, 2, 3)}
+    aggregate = NovelProjectState(novel_id="legacy", imported_manuscript=True, chapters=chapters, current_chapter_idx=3)
+    (root / "project_state.json").write_text(aggregate.model_dump_json(), encoding="utf-8")
+    newer = chapters[3].model_copy(update={"title": "已改过的标题", "full_text": "已单独保存的第三章"})
+    (root / "chapters/chapter_003.json").write_text(newer.model_dump_json(), encoding="utf-8")
+    before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+    def load(**options):
+        return StateManager("legacy", base_dir=str(tmp_path), **options)
+
+    assert load(load_chapter_content=False).state.chapters[3].title == newer.title
+    manager = load()
+    write = manager._persist_chapter_content
+
+    def interrupted(chapter):
+        write(chapter)
+        if chapter.chapter_number == 2:
+            raise OSError("migration interrupted")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(manager, "_persist_chapter_content", interrupted)
+        with pytest.raises(OSError, match="migration interrupted"):
+            manager.replace_chapter_text(1, "改好的第一章")
+    assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+    assert load().replace_chapter_text(1, "改好的第一章")
+    saved = load()
+    assert not saved.load_warnings
+    assert [saved.state.chapters[n].full_text for n in (1, 2, 3)] == ["改好的第一章", "原文2", newer.full_text]
+    assert read_json(root / "project_state.json")["chapters"] == {}
+    assert (root / "chapters/chapter_002.txt").read_text(encoding="utf-8").endswith("原文2\n")
+    assert (root / "chapters/chapter_003.json").read_bytes() == before[root / "chapters/chapter_003.json"]
 
 
 class TestSnapshotV3(unittest.TestCase):
@@ -558,6 +612,13 @@ class TestChineseMemoryRecall(unittest.TestCase):
         )
         self.assertEqual(len(results), 1)
         self.assertIn("青铜罗盘", results[0].content)
+
+    def test_recall_finds_a_name_written_with_extension_han_characters(self):
+        memory = SemanticMemoryIndex()
+        memory.add_chapter_memory(1, 1, "来信", "他将印有𠮷㐀的信封收好。", [])
+        memory.add_chapter_memory(2, 1, "回信", "钟楼响了三声。", [])
+        found = memory.search_relevant_memories("𠮷㐀", current_chapter=8)
+        self.assertEqual([chunk.chapter_number for chunk in found], [1])
 
 
 class TestKnowledgeGraphIdentity(unittest.TestCase):

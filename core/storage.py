@@ -38,7 +38,11 @@ class ProjectBusyError(SafeUserMessage, RuntimeError):
 
 
 class ProjectConflictError(SafeUserMessage, RuntimeError):
-    """The in-memory project no longer matches the version on disk."""
+    """A project operation conflicts with its current state."""
+
+
+class ProjectRevisionConflictError(ProjectConflictError):
+    """A stale project revision requires reloading the workspace."""
 
 
 class ProjectReadOnlyError(SafeUserMessage, RuntimeError):
@@ -118,6 +122,11 @@ def revision_token(novel_id: str, version: tuple[Any, ...]) -> str:
     """Opaque, project-bound revision for optimistic HTTP write preconditions."""
     serialized = json.dumps([novel_id, version], ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def assert_revision_matches(actual: str, expected: str) -> None:
+    if expected != actual:
+        raise ProjectRevisionConflictError("作品已更新；本次修改未保存，请保留输入内容并刷新后重新核对")
 
 
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:

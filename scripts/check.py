@@ -25,7 +25,7 @@ _SOURCE_DIRS = (
 _ROOT_INPUTS = (
     "main.py", "web_ui.py", "pyproject.toml", "requirements.txt", "requirements-dev.txt",
     "requirements.lock", "requirements-dev.lock", "package.json", "package-lock.json",
-    "playwright.config.mjs",
+    "playwright.config.mjs", "playwright.safari.config.mjs",
 )
 _IGNORED_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", "node_modules"}
 
@@ -135,12 +135,9 @@ def main() -> int:
             "for(const code of blocks)new Function(code);"
             "console.log('JavaScript syntax OK: '+blocks.length+' blocks');"
         )]))
-        commands.append(("Real-browser test syntax", [
-            node, "--check", "playwright.config.mjs",
-        ]))
-        commands.append(("Real-browser spec syntax", [
-            node, "--check", "tests/browser/novel_studio.spec.mjs",
-        ]))
+        browser_scripts = ("playwright.config.mjs", "playwright.safari.config.mjs", "tests/browser/studio-fixture.mjs",
+                           "tests/browser/native-safari.mjs", "tests/browser/novel_studio.spec.mjs")
+        commands.extend((f"Browser syntax: {script}", [node, "--check", script]) for script in browser_scripts)
     else:
         report["skipped_checks"].append("Browser state/syntax, real-browser syntax and asset checks: Node.js unavailable")
         print("Node.js is unavailable; browser JavaScript checks were NOT run.", flush=True)

@@ -13,7 +13,7 @@ from config.compliance_words import (
     normalize_custom_words,
 )
 from core.schemas import ManuscriptFact
-from core.text_limits import MAX_CHAPTER_TEXT_CHARS
+from core.text_limits import MAX_CHAPTER_TEXT_CHARS, require_chapter_prose
 
 
 def valid_text(value: str) -> str:
@@ -27,6 +27,7 @@ def valid_text(value: str) -> str:
 
 
 Text = Annotated[str, AfterValidator(valid_text)]
+ChapterProse = Annotated[Text, Field(min_length=1, max_length=MAX_CHAPTER_TEXT_CHARS), AfterValidator(require_chapter_prose)]
 ChapterNumber = Annotated[int, Field(strict=True, ge=1, le=1_000_000)]
 Tag = Annotated[Text, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Word = Annotated[
@@ -97,14 +98,7 @@ class CreateNovelRequest(RequestModel):
 
 class ManuscriptChapter(RequestModel):
     title: Tag
-    text: Text = Field(min_length=1, max_length=MAX_CHAPTER_TEXT_CHARS)
-
-    @field_validator("text")
-    @classmethod
-    def require_prose(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("章节正文不能为空")
-        return value
+    text: ChapterProse
 
 
 class AppendChapterRequest(ManuscriptChapter, ProjectRevisionRequest):
@@ -223,14 +217,7 @@ class HistoryRepairRequest(ProjectRevisionRequest):
 class ChapterTextRequest(ProjectRevisionRequest):
     chapter: ChapterNumber
     title: Tag | None = None
-    text: Text = Field(min_length=1, max_length=MAX_CHAPTER_TEXT_CHARS)
-
-    @field_validator("text")
-    @classmethod
-    def nonempty_text(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("正文不能为空白")
-        return value
+    text: ChapterProse
 
 
 class FindingDecisionRequest(ProjectRevisionRequest):

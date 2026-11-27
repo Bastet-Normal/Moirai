@@ -32,7 +32,12 @@ def test_quality_gate_report_covers_static_test_cli_and_web_steps(gate, monkeypa
     saved = report(gate)
     assert saved["status"] == "passed"
     assert saved["changed_inputs"] == []
-    assert len(saved["checks"]) == 10
+    names = {step["name"] for step in saved["checks"]}
+    assert {"Ruff", "Static security analysis", "Compile", "Tests and coverage", "Dependency consistency",
+            "CLI contract", "Browser state regression tests", "Browser JavaScript syntax"} <= names
+    for script in ("playwright.config.mjs", "playwright.safari.config.mjs", "tests/browser/studio-fixture.mjs",
+                   "tests/browser/native-safari.mjs", "tests/browser/novel_studio.spec.mjs"):
+        assert f"Browser syntax: {script}" in names
     assert saved["inputs"] == check.input_fingerprints(gate)
 
 

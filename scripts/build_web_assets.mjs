@@ -48,3 +48,18 @@ for (const [target, pkg] of notices) {
   }
   writeFileSync(join(licensesDir, target), license);
 }
+
+// Keep the browser independent of the Unicode version in the installed OS.
+const repertoire = JSON.parse(readFileSync(join(root, "core", "han_repertoire.json"), "utf8"));
+const hanRanges = repertoire.ranges.map(range =>
+  range.split("-").map(hex => String.fromCodePoint(parseInt(hex, 16))).join("-")
+).join("");
+writeFileSync(join(assets, "han-count.js"),
+  String.raw`// Generated from core/han_repertoire.json.
+const nonHanRuns = /[^${hanRanges}]+/gu;
+function countHanCharacters(text) {
+    const han = text.replace(nonHanRuns, '');
+    // Each supplementary Han character has two UTF-16 units. Count only its leading unit.
+    return han.replace(/[\uDC00-\uDFFF]/g, '').length;
+}
+`);

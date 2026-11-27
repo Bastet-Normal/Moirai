@@ -49,6 +49,7 @@ from core.schemas import (
 )
 from core.state_manager import ChapterContextError, StateManager
 from core.storage import append_text_durable, project_lock
+from core.text_limits import count_han_characters
 
 console = Console()
 logger = logging.getLogger("novelengine.pipeline")
@@ -740,7 +741,7 @@ class NovelPipeline:
             )
             console.print(f"[yellow]⚠️ {message}[/yellow]")
 
-        chinese_char_count = sum('\u4e00' <= c <= '\u9fff' for c in polished_text)
+        chinese_char_count = count_han_characters(polished_text)
 
         # 6. 状态管家 Agent 提取增量状态
         state_extraction_failed = False

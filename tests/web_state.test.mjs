@@ -1,6 +1,7 @@
 // Unit tests execute the browser application scripts with a minimal DOM.
 // They deliberately do not use a real browser, user data, or any model provider.
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
@@ -12,6 +13,8 @@ const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8')
 const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1]).find(code => code.includes('function selectNovel'));
 assert.ok(script);
+const draftScript = readFileSync(new URL('../web/assets/editor-drafts.js', import.meta.url), 'utf8');
+const hanCountScript = readFileSync(new URL('../web/assets/han-count.js', import.meta.url), 'utf8');
 const graphScript = readFileSync(new URL('../web/assets/entity-graph.js', import.meta.url), 'utf8');
 
 class Element {
@@ -79,8 +82,11 @@ function setup({workspace = false} = {}) {
         localStorage: {
             getItem: key => stored.get(key) ?? null,
             setItem: (key, value) => stored.set(key, String(value)),
+            removeItem: key => stored.delete(key),
+            get length() { return stored.size; },
+            key: index => [...stored.keys()][index] ?? null,
         },
-        TextEncoder,
+        TextEncoder, crypto: webcrypto,
         window: {addEventListener() {}, matchMedia: () => ({matches: false})},
         requestAnimationFrame: callback => callback(),
         getComputedStyle: element => ({visibility: element.style.visibility ?? "visible"}),
@@ -97,6 +103,8 @@ function setup({workspace = false} = {}) {
         fetch: (url, options = {}) => new Promise((resolve, reject) => requests.push({url, options, resolve, reject})),
     });
     const run = code => vm.runInContext(code, context);
+    run(draftScript);
+    run(hanCountScript);
     run(graphScript);
     run(script);
     // Renderers are outside the race tests' scope; fetch/lifecycle/save functions
@@ -127,6 +135,49 @@ function detail(id, revision = id.repeat(64).slice(0, 64)) {
 function chapters(numbers, loaded = true) {
     return numbers.map(n => ({chapter_number:n, title:`章节${n}`, word_count:3, volume_number:1, ...(loaded ? {full_text:`正文${n}`} : {})}));
 }
+
+test('changing the version selector always previews the last choice, including after a failed read', async () => {
+    const {run, bind, requests, respond, el} = setup();
+    bind();
+    const mask = el('modal-chapter-versions');
+    mask._projectContext = run('captureProjectContext()');
+    mask._chapter = 1;
+    mask.classList.add('open');
+    const select = el('chapter-version-list');
+    const button = el('chapter-version-restore');
+    const preview = el('chapter-version-previous');
+    const handler = html.match(/<select\b[^>]*id="chapter-version-list"[^>]*onchange="([^"]+)"/)[1];
+    function choose(number) {
+        select.value = number;
+        return run(`(function () { return ${handler}; }).call(document.getElementById('chapter-version-list'))`);
+    }
+    const first = choose('1');
+    const second = choose('2');
+    assert.equal(requests.length, 2);
+    assert.equal(button.disabled, true);
+    respond(requests[1], {revision: mask._projectContext.revision, version: {title:'二', text:'准确的预览'}});
+    await second;
+    respond(requests[0], {detail:'旧请求失败'}, 409);
+    await first;
+    assert.equal(preview.textContent, '二\n\n准确的预览');
+    assert.equal(button.disabled, false);
+    const broken = choose('1');
+    assert.equal(button.disabled, true);
+    assert.ok(!preview.textContent.includes('准确的预览'));
+    respond(requests[2], {detail:'这份历史稿无法读取'}, 409);
+    await broken;
+    assert.equal(preview.textContent, '这份历史稿无法读取');
+    assert.equal(button.disabled, true);
+});
+
+test('editor counts Unicode code points across the shared Han ranges and ignores incomplete pairs', () => {
+    const ranges = JSON.parse(readFileSync(new URL('../core/han_repertoire.json', import.meta.url), 'utf8')).ranges;
+    const count = vm.runInNewContext(hanCountScript + '\ncountHanCharacters');
+    const endpoints = ranges.flatMap(range => range.split('-').map(hex => String.fromCodePoint(parseInt(hex, 16))));
+    assert.equal(count(endpoints.join('！')), endpoints.length);
+    assert.equal(count('〇𠮷㐀海！ A1🚢\uD800\uDC00\uD800☆\uDC00'.repeat(4096)), 4 * 4096);
+    assert.equal(count(''), 0);
+});
 
 test('refresh preserves the current tab, chapter identity, expanded directory and scroll; explicit selection resets', async () => {
     const s = setup({workspace:true});
@@ -633,7 +684,7 @@ test('saving a fallback tab draft does not delete a newer draft held by another 
         var removedPersistent=0; localStorage.removeItem=()=>removedPersistent++;
         sortedChapters=[{chapter_number:1,title:'A',full_text:'正式稿'}];
         refreshProjectContext=async()=>false; openChapterEditModal();
-        var storageKey=chapterDraftKey(captureProjectContext(),1);
+        var storageKey=editorDrafts.chapterKey(currentNovelId,1);
         localStorage.setItem(storageKey, JSON.stringify({text:'另一标签页的草稿'}));`);
     s.el('ce-text').value = '当前标签页的草稿';
     s.run('stashChapterDraft()');
@@ -687,6 +738,52 @@ test('after a rejected save the editor can load the latest official text without
     assert.match(s.el('ce-conflict-current').textContent, /新正文/);
     assert.equal(s.el('ce-save').disabled, true);
     assert.equal(s.requests.length, 1);
+});
+
+test('an unfinished new chapter follows a changed catalog and saves exactly once under its new number', async () => {
+    const s = setup();
+    s.bind('book');
+    s.run(`novelData.summary = {current_chapter:2};
+        localStorage.setItem('moirai_editor:book:2:new', JSON.stringify({title:'遗留稿', text:'旧版浏览器里的草稿'}));
+        localStorage.setItem('moirai_editor:other:new', JSON.stringify({title:'另一部', text:'保留'}));
+        openNewChapterEditor();`);
+    assert.equal(s.el('ce-title').value, '遗留稿');
+    assert.equal(s.el('ce-text').value, '旧版浏览器里的草稿');
+    s.el('ce-text').value = '准备保存的章节';
+    s.run('stashChapterDraft()');
+    const stale = s.run('saveChapterEdit()');
+    assert.equal(s.el('ce-text').readOnly, true);
+    s.respond(s.requests[0], {code:'project_conflict', detail:'作品已更新'}, 409);
+    await stale;
+    assert.equal(s.el('ce-text').readOnly, false);
+    assert.equal(s.el('ce-save').disabled, true);
+    s.run(`refreshProjectContext = async () => { novelData.revision = 'b'.repeat(64); novelLoadToken++;
+        novelData.summary.current_chapter = 3; return true; };`);
+    await s.run('compareLatestChapterDraft()');
+    assert.equal(s.el('ce-meta').textContent, '第 4 章');
+    assert.equal(s.el('ce-text').value, '准备保存的章节');
+    assert.equal(s.el('ce-save').disabled, false);
+    const save = s.run('saveChapterEdit()');
+    assert.deepEqual(JSON.parse(s.requests[1].options.body), {expected_revision:'b'.repeat(64), title:'遗留稿', text:'准备保存的章节'});
+    s.respond(s.requests[1], {chapter:4});
+    await save;
+    s.run('openNewChapterEditor()');
+    assert.equal(s.el('ce-text').value, '');
+    assert.ok(s.run("localStorage.getItem('moirai_editor:other:new')"));
+});
+
+test('a chapter limit explains the refusal without asking to reload an unchanged catalog', async () => {
+    const s = setup();
+    s.bind();
+    s.run('openNewChapterEditor()');
+    s.el('ce-title').value = '终章以后';
+    s.el('ce-text').value = '保留这段';
+    const save = s.run('saveChapterEdit()');
+    s.respond(s.requests[0], {detail:'已达到总纲终章，请调整总纲范围'}, 409);
+    await save;
+    assert.match(s.run('toasts.at(-1).message'), /总纲终章/);
+    assert.equal(s.el('ce-reload').classList.contains('hidden'), true);
+    assert.equal(s.el('ce-text').readOnly, false);
 });
 
 test('character edits surface the server effective-chapter decision', async () => {
@@ -1218,6 +1315,29 @@ test('late full-book search results cannot cross a project revision', async () =
     assert.doesNotMatch(s.el('palette-list').innerHTML, /过期结果/);
 });
 
+test('search distinguishes no results from pending, failed and incomplete scans', async () => {
+    const s = setup({workspace:true});
+    s.bind('a');
+    s.el('palette-input').value = '小岛';
+    s.run("schedulePaletteSearch('小岛')");
+    assert.match(s.el('palette-status').textContent, /正在搜索/);
+    assert.doesNotMatch(s.el('palette-list').innerHTML, /没有匹配/);
+    const load = () => s.run("loadPaletteSearch('小岛',paletteSearchToken,captureProjectContext())");
+    const failed = load();
+    s.respond(s.requests.at(-1), {}, 503);
+    assert.equal(await failed, false);
+    assert.match(s.el('palette-status').textContent, /暂时不可用/);
+    for (const incomplete of [true, false]) {
+        const result = load();
+        s.respond(s.requests.at(-1), {novel_id:'a', revision:'a'.repeat(64), results:[], incomplete});
+        assert.equal(await result, true);
+        assert.equal(s.el('palette-status').textContent.includes('部分章节'), incomplete);
+        assert.equal(s.el('palette-list').innerHTML.includes('没有匹配'), !incomplete);
+    }
+    s.run("schedulePaletteSearch('小岛'); schedulePaletteSearch('')");
+    assert.equal(s.el('palette-list').hasAttribute('aria-busy'), false);
+});
+
 test('full-book search normalizes repeated whitespace consistently across the request and result filter', async () => {
     const s = setup({workspace:true});
     s.bind('a');
@@ -1508,4 +1628,27 @@ test('character search includes current location and keeps checkpoint portraits 
     assert.match(second.split('<details>')[0], /找回&lt;旧信&gt;/);
     assert.doesNotMatch(second.split('<details>')[0], /新手村/);
     assert.match(second.split('<details>')[1], /新手村/);
+});
+
+test('typing back to the original during a save is kept as an edit of the acknowledged version', async () => {
+    const s = setup();
+    s.bind('book');
+    s.run(`sortedChapters = [{chapter_number:1,title:'开篇',full_text:'原文'}];
+        refreshProjectContext = async () => false;
+        openChapterEditModal();`);
+    s.el('ce-text').value = '第一次修改';
+    s.run('stashChapterDraft()');
+    const pending = s.run('saveChapterEdit()');
+    s.el('ce-text').value = '原文';
+    s.run('stashChapterDraft()');
+    s.respond(s.requests[0], {revision:'b'.repeat(64)});
+    await pending;
+    assert.equal(s.el('modal-chapter').classList.contains('open'), true);
+    const draft = JSON.parse(s.run("localStorage.getItem('moirai_editor:book:1')"));
+    assert.equal(draft.text, '原文');
+    assert.equal(draft.baseline.text, '第一次修改');
+    const next = s.run('saveChapterEdit()');
+    assert.equal(JSON.parse(s.requests[1].options.body).expected_revision, 'b'.repeat(64));
+    s.respond(s.requests[1], {revision:'c'.repeat(64)});
+    await next;
 });

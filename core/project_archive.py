@@ -5,16 +5,21 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
 import stat
+import struct
 import tempfile
 import uuid
 import zipfile
+from collections.abc import Iterator
+from datetime import datetime
 from os import PathLike
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
+from core.chapter_versions import is_version_record, read_version_record
 from core.knowledge_graph import KnowledgeGraph
 from core.project_ids import WINDOWS_RESERVED_NAMES, is_valid_project_id
 from core.project_transactions import recover_project
@@ -26,6 +31,7 @@ MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 1_000 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 250
 MAX_JSON_MEMBER_BYTES = 64 * 1024 * 1024
+_UNIX_EPOCH_FILETIME = 116_444_736_000_000_000  # 100 ns intervals since 1601-01-01 UTC
 
 
 class InvalidProjectArchive(ValueError):
@@ -49,6 +55,79 @@ def _open_archive(source: ArchiveSource) -> zipfile.ZipFile:
     if isinstance(source, (bytes, bytearray)):
         return zipfile.ZipFile(io.BytesIO(source))
     return zipfile.ZipFile(source)
+
+
+def _exceeds_compression_limit(info: zipfile.ZipInfo) -> bool:
+    return info.file_size > MAX_COMPRESSION_RATIO * info.compress_size
+
+
+def _write_version_member(archive: zipfile.ZipFile, path: Path, name: str, method: int) -> None:
+    # The chapter history displays the file's mtime. DOS ZIP dates have no
+    # timezone and round to two seconds. The standard NTFS extra field is UTC.
+    info = zipfile.ZipInfo.from_file(path, name, strict_timestamps=False)
+    info.compress_type = method
+    mtime_ns = path.stat().st_mtime_ns
+    ticks = _UNIX_EPOCH_FILETIME + mtime_ns // 100
+    info.extra = struct.pack("<HHIHHQQQ", 0x000A, 32, 0, 1, 24, ticks, 0, 0)
+    seconds = mtime_ns // 1_000_000_000
+    if -(2**31) <= seconds < 2**31:
+        # Unix archive tools commonly read the Info-ZIP UT field instead.
+        info.extra += struct.pack("<HHBi", 0x5455, 5, 1, seconds)
+    with path.open("rb") as source, archive.open(info, "w") as sink:
+        shutil.copyfileobj(source, sink, 1024 * 1024)
+
+
+def _extra_fields(data: bytes) -> Iterator[tuple[int, bytes]]:
+    offset = 0
+    while offset + 4 <= len(data):
+        tag, length = struct.unpack_from("<HH", data, offset)
+        offset += 4
+        if offset + length > len(data):
+            break
+        yield tag, data[offset:offset + length]
+        offset += length
+
+
+def _version_mtime_ns(info: zipfile.ZipInfo) -> int:
+    unix_seconds = None
+    for tag, data in _extra_fields(info.extra):
+        if tag == 0x000A:
+            for field, value in _extra_fields(data[4:]):
+                if field == 1 and len(value) == 24:
+                    ticks = int.from_bytes(value[:8], "little")
+                    if ticks:
+                        return (ticks - _UNIX_EPOCH_FILETIME) * 100
+        elif tag == 0x5455 and len(data) >= 5 and data[0] & 1:
+            unix_seconds = int.from_bytes(data[1:5], "little", signed=True)
+    # Older Moirai archives only contain the original local wall-clock date.
+    if unix_seconds is None:
+        unix_seconds = int(datetime(*info.date_time).timestamp())
+    return unix_seconds * 1_000_000_000
+
+
+def write_project_archive(project_dir: Path, destination: Path) -> None:
+    """Write a locked project snapshot using compression accepted by our importer."""
+    project_dir = project_dir.resolve()
+
+    def write_members(stored: set[str]) -> set[str]:
+        with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED, compresslevel=1, strict_timestamps=False) as archive:
+            for path in sorted(project_dir.rglob("*")):
+                if path.is_symlink() or not path.resolve().is_relative_to(project_dir):
+                    raise InvalidProjectArchive("项目包含链接到其他位置的文件，拒绝打包")
+                if path.is_file():
+                    name = path.relative_to(project_dir.parent).as_posix()
+                    method = zipfile.ZIP_STORED if name in stored else zipfile.ZIP_DEFLATED
+                    if is_version_record(path.relative_to(project_dir)):
+                        _write_version_member(archive, path, name, method)
+                    else:
+                        archive.write(path, name, compress_type=method)
+            return {info.filename for info in archive.infolist() if _exceeds_compression_limit(info)}
+
+    # The usual case only visits the files once. For an unusually repetitive
+    # member, store its exact bytes and keep compressing the rest of the book.
+    too_dense = write_members(set())
+    if too_dense and write_members(too_dense):
+        raise InvalidProjectArchive("打包期间作品文件已更改，请重新备份")
 
 
 def inspect_archive(source: ArchiveSource) -> tuple[zipfile.ZipFile, str, NovelProjectState]:
@@ -97,7 +176,7 @@ def _inspect_open_archive(archive: zipfile.ZipFile) -> tuple[zipfile.ZipFile, st
         if total_size > MAX_UNCOMPRESSED_BYTES:
             archive.close()
             raise InvalidProjectArchive("备份解压后体积过大（上限 1GB）")
-        if info.compress_size and info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+        if info.compress_size and _exceeds_compression_limit(info):
             archive.close()
             raise InvalidProjectArchive("备份压缩比异常，疑似压缩炸弹")
         if info.file_size and not info.compress_size:
@@ -285,6 +364,15 @@ def validate_project_tree(stage_root: Path, project_id: str) -> list[str]:
     if warnings:
         raise InvalidProjectArchive(f"备份包含损坏的数据文件: {warnings[0]}")
 
+    project_dir = stage_root / project_id
+    for record in sorted((project_dir / "chapter_versions").rglob("*.json")):
+        if is_version_record(record.relative_to(project_dir)):
+            try:
+                read_version_record(record)
+            except (OSError, ValueError, RecursionError):
+                slot = record.relative_to(project_dir).parts[1]
+                warnings.append(f"第 {int(slot)} 章的历史版本 {int(record.stem)} 无法读取，已保留原文件。")
+
     chapter_numbers = set(full.state.chapters)
     expected_current = max(chapter_numbers, default=0)
     if full.state.current_chapter_idx != expected_current:
@@ -330,7 +418,6 @@ def validate_project_tree(stage_root: Path, project_id: str) -> list[str]:
         if any(chunk.chapter_number != number for chunk in memory.chunks):
             raise InvalidProjectArchive(f"章节记忆归属不一致: {memory_file.name}")
 
-    warnings: list[str] = []
     snapshots_dir = stage_root / project_id / "snapshots"
     for snapshot_file in snapshots_dir.glob("snapshot_after_chap_*.json"):
         number = _numbered_file(snapshot_file, r"snapshot_after_chap_(\d+)\.json")
@@ -359,7 +446,7 @@ def validate_project_tree(stage_root: Path, project_id: str) -> list[str]:
             ):
                 raise ValueError("snapshot project identity mismatch")
             if snapshot_state.current_chapter_idx != number:
-                warnings.append(f"{snapshot_file.name}: 快照进度不匹配，回滚时将被禁用")
+                warnings.append(f"第 {number} 章的快照进度不匹配，已禁用该次回滚。")
         except Exception as exc:
             raise InvalidProjectArchive(f"章节快照无法恢复: {snapshot_file.name}") from exc
 
@@ -416,7 +503,9 @@ def validate_project_tree(stage_root: Path, project_id: str) -> list[str]:
     return warnings
 
 
-def import_project_archive(source: ArchiveSource, output_root: Path) -> tuple[str, str]:
+def import_project_archive(
+    source: ArchiveSource, output_root: Path, *, warnings: list[str] | None = None,
+) -> tuple[str, str]:
     """Validate, stage and atomically move one archive into the project store."""
     archive, project_id, state = inspect_archive(source)
     stage_root = None
@@ -446,10 +535,16 @@ def import_project_archive(source: ArchiveSource, output_root: Path) -> tuple[st
                     sink.write(chunk)
             if member_total != info.file_size:
                 raise InvalidProjectArchive("备份条目长度与声明不一致")
+            if is_version_record(path.relative_to(project_id)):
+                try:
+                    stamp = _version_mtime_ns(info)
+                    os.utime(target, ns=(stamp, stamp))
+                except (OSError, OverflowError, ValueError) as exc:
+                    raise InvalidProjectArchive("备份中的历史稿保存时间无效") from exc
         staged_project = stage_root / project_id
         if not (staged_project / "project_state.json").is_file():
             raise InvalidProjectArchive("备份解压后缺少项目状态")
-        validate_project_tree(stage_root, project_id)
+        review = validate_project_tree(stage_root, project_id)
         with project_lock(destination, timeout=0), project_lock(destination, scope="snapshot"):
             recover_project(output_root, project_id)
             if destination.exists():
@@ -465,4 +560,6 @@ def import_project_archive(source: ArchiveSource, output_root: Path) -> tuple[st
             shutil.rmtree(stage_root, ignore_errors=True)
 
     title = state.concept.title if state.concept else project_id
+    if warnings is not None:
+        warnings.extend(review)
     return project_id, title

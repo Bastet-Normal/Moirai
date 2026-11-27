@@ -24,19 +24,21 @@ pipeline/novel_pipeline.py              workflow orchestration
              ├── schemas.py             persisted domain contracts
              ├── planning.py            initial package/outline publication contracts
              ├── state_manager.py       project aggregate and exports
+             ├── chapter_store.py       ordered access to sharded and embedded prose
              ├── storage.py             atomic files and project locks
              ├── project_transactions.py durable undo journals and crash recovery
              ├── env_file.py            atomic dotenv batch updates
              ├── project_ids.py         shared portable identifier rules
              ├── project_export.py      Markdown/TXT/EPUB publication
              ├── task_status.py         one local worker reservation
-             ├── project_archive.py     validated backup import
+             ├── project_archive.py     backup creation and validated restoration
              ├── project_trash.py       validated trash listing and restore
              ├── runtime_config.py      transactional live configuration
              ├── semantic_memory.py     deterministic Chinese recall
              └── knowledge_graph.py     entity and relation model
 
 web/index.html                           workspace, chapter editor and review UI
+web/assets/editor-drafts.js              browser draft ownership, recovery and session storage
 web/assets/entity-graph.js               entity symbols, layout, zoom and relationship selection
 web/assets/                              local styles, scripts, fonts and artwork
 novel_projects/<id>/                     user-owned project data
@@ -62,7 +64,9 @@ response carries the exported `X-Project-Revision`. Downloads never call the
 editorial mutation helpers, rewrite project files or advance the revision.
 
 ZIP backup downloads copy all project files under both locks and retain archive
-path/link checks. All four formats share `TemporaryDownloadResponse`, whose
+path/link checks. Export and import share the per-file compression limit. If
+deflating a repetitive manuscript exceeds that limit, the exporter stores the
+affected files verbatim in the ZIP. All four formats share `TemporaryDownloadResponse`, whose
 `finally` cleanup covers successful responses, HEAD/range errors and client
 disconnect/cancellation. Deferred server path-send is disabled so the file cannot
 be deleted before that server reads it. Files are streamed, not buffered in a
@@ -273,12 +277,15 @@ no current projection.
 - Re-entrant, OS-backed operation locks cover the complete Web/CLI generation workflow, including model calls and gaps between chapters. Acquisition is bounded and competing writers fail before invoking a model. A separate short snapshot lock protects consistent reads during disk writes; readers remain available during model calls.
 - External revision tombstones plus aggregate-file fingerprints reject stale StateManager instances, including after deletion, import or rename. Lightweight or damaged project views cannot write. HTTP reports busy as 423 and stale/incomplete state as 409; CLI reports busy without a traceback.
 - `project_state.json` contains only the aggregate state. Prose stays in independent chapter files, chapter navigation uses small metadata shards, and semantic memory is stored per chapter. Appending chapters therefore no longer rewrites all prior prose or all prior memory.
-- Legacy aggregate projects remain readable and migrate to the sharded layout on their next successful mutation.
+- A legacy aggregate can contain prose alongside newer chapter files. The canonical file takes precedence. When a write replaces the aggregate, it first persists every retained chapter still stored only inside it. The same undo journal covers those files and the aggregate. Orphaned chapter metadata flags a damaged project and prevents edits and incomplete delivery.
 - The Web app reserves its single local generation slot before queuing a background task. Two simultaneous clicks cannot queue duplicate writers.
 - Background workers must present the exact reservation token; a delayed or duplicated callback cannot take over a newer task's status.
 - Every newly generated or reconciled chapter stores a `state_events/chapter_NNN.json` event. Version 2 binds the event to the exact chapter prose SHA-256; a mismatched body/event pair is rejected by a full load. Rewriting an event-sourced historical chapter replays all following events from `state_events/baseline.json`; removed items, relations and hooks do not leak from the old draft.
 - Explicit character-card edits live in versioned `manual_overrides.json`. Static editorial fields apply to every known appearance; dynamic level/location/health/mood edits record `effective_after_chapter` and are interleaved with chapter events during replay. They cannot leak into earlier chapters or override later story events, and rollback excludes future-dated edits. Legacy undated dynamic records remain current-only. Corrupt override or reconciliation files make the loaded project read-only.
-- Direct manual prose edits are marked in `reconciliation_required.json` until the affected chapter is regenerated or its existing prose is processed by the state-only reconciliation action.
+- Whole-chapter and paragraph edits go through `replace_chapter_text`. It checks the manuscript under the operation lock and opens a write transaction only for an actual change. A prose change to a tracked storyline records a reconciliation marker in the same transaction. Imported manuscripts without an outline or timeline baseline remain prose-only.
+- Manual creation validates the requested chapter against the outline and chapter limit before opening a transaction. Generated, imported and edited prose share the Han-character repertoire in `core/han_repertoire.json`. The asset build emits the corresponding browser expression. Previous chapter statistics remain readable without a library migration.
+- New chapters have a persistent chapter ID. Version files live under the chapter number and ID, so a replacement chapter after rollback starts with its own history. Chapters predating IDs use the original numeric directory. Full backups include retired history.
+- The history list uses modification times and reads no prose. Backup ZIPs carry UTC modification times for these records in standard NTFS extra fields. Restore also reads Info-ZIP UTC timestamps and the local dates available in older backups. Import reports unreadable historical drafts while preserving their bytes and the usable manuscript. Preview and restore share the same version-record reader.
 - Rollback truncates chapters, snapshots, short-drama files, reader simulations and release files together, and clears all branch simulations whose current-character inputs were restored.
 - Rollback rewrites retained chapter JSON/TXT and metadata from the snapshot, so restarting cannot resurrect edited prose. Timeline filenames are sorted by chapter number rather than lexicographically, including after chapter 999.
 
@@ -297,6 +304,13 @@ gap between HTTP validation and mutation. Web continuation, queued regeneration 
 model-backed projection task check the captured revision again inside the worker's project
 operation lock. A stale continuation therefore stops before planning recovery, outline or
 chapter model calls; direct CLI continuation remains protected by the operation lease.
+
+The new-chapter form persists an `Idempotency-Key` in its local draft on first submission.
+The server records it in the chapter in the creation transaction. Later edits and rewrites
+preserve that identity. A matching retry returns the existing chapter, including when the
+acknowledgement was lost before a page reload. A different title or body with the same key
+opens a comparison against that chapter. Updating it requires confirmation and a current
+revision. Clients without a key use the original revision-bound append contract.
 
 Browser editors capture their project, chapter and loaded revision when opened.
 Project/chapter/library request generations discard late successes and failures;
@@ -501,9 +515,10 @@ npm run test:web
 npm audit
 ```
 
-The browser smoke gate starts the disposable demo on an explicit loopback port and
-uses the macOS system Safari through safaridriver. Playwright schedules the scenarios
-and checks assertions.
+Both browser fixtures run `tests/browser/novel_studio.spec.mjs` against a disposable
+loopback demo. Daily runs use headless WebKit with `npm run test:webkit`. Release
+CI uses the native Safari fixture on macOS. Run the following commands on the
+remote Mac or with consent for the current local Safari session.
 
 ```bash
 /usr/bin/safaridriver --enable
@@ -530,10 +545,11 @@ concept, world, protagonist or chapter-source inputs invalidate it transactional
 an identical chapter republication does not. The underlying transport remains a fail-closed
 guard, so an unpatched model path fails the gate instead of reaching a provider.
 
-Full-project search is an explicit read-only projection in `core/project_search.py`.
-The HTTP endpoint bounds query and result sizes, returns the exact project revision,
-and searches lazily stored chapter prose plus structured character, foreshadowing,
-outline, world and concept data. The command palette debounces and cancels superseded
+Full-project search in `core/project_search.py` ranks structured labels first,
+then chapter text in numeric order, then other structured matches. It reads chapters
+from `core/chapter_store.py` under one snapshot lock and stops once further prose
+cannot change the bounded result. An unreadable shard leaves other matches available
+and marks the search incomplete. The command palette debounces and cancels superseded
 requests, escapes every returned label/snippet, and accepts a response only while its
 project identity, load token and revision still match the open workspace. Search never
 publishes state or advances the revision.

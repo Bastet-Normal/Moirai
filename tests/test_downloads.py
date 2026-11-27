@@ -2,8 +2,11 @@
 
 import asyncio
 import io
+import os
+import struct
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -13,6 +16,7 @@ from fastapi.testclient import TestClient
 import web_ui
 from api.downloads import build_download
 from config.settings import get_settings
+from core import project_archive
 from core.schemas import ChapterContent, NovelConcept
 from core.state_manager import StateManager
 from core.task_status import GenerationTaskStatus
@@ -137,6 +141,17 @@ def test_download_missing_project_does_not_create_it(project, route):
 
 def test_downloaded_backup_restores_through_import_api_without_overwriting_source(project, tmp_path, monkeypatch):
     manager, client = project
+    manager.append_manual_chapter("长段草稿", "雨还在下。\n" * 2000)
+    manager.replace_chapter_text(1, "第二稿。")
+    manager.replace_chapter_text(1, "第三稿。")
+    history_url = "/api/novel/book/chapter/1/versions"
+    versions_before_import = {}
+    for number, record in enumerate(sorted((manager.base_dir / "chapter_versions").rglob("*.json")), start=1):
+        stamp = (1_600_000_000 + number) * 1_000_000_000 + 654_321_000
+        os.utime(record, ns=(stamp, stamp))
+        versions_before_import[number] = client.get(f"{history_url}/{number}").json()["version"]
+    history = client.get(history_url).json()["versions"]
+    assert len(history) == len(versions_before_import) == 2
     before = project_files(manager)
     backup = client.get("/api/novel/book/export_backup")
     assert backup.status_code == 200
@@ -152,6 +167,10 @@ def test_downloaded_backup_restores_through_import_api_without_overwriting_sourc
             response = client.post("/api/novels/import", files={"file": ("book.zip", backup.content, "application/zip")})
             assert response.status_code == 200, response.text
             assert response.json()["novel_id"] == "book"
+            assert response.json()["warnings"] == []
+            assert client.get(history_url).json()["versions"] == history
+            for number, version in versions_before_import.items():
+                assert client.get(f"{history_url}/{number}").json()["version"] == version
             imported = StateManager("book")
             assert imported.load_warnings == []
             assert imported.state.chapters[1].full_text == manager.state.chapters[1].full_text
@@ -162,6 +181,60 @@ def test_downloaded_backup_restores_through_import_api_without_overwriting_sourc
     finally:
         get_settings.cache_clear()
     assert project_files(manager) == before
+
+
+@pytest.mark.parametrize("unix_time", [None, 1_670_123_457])
+def test_older_backup_restores_history_time_from_zip_headers(tmp_path, unix_time):
+    name = "book/chapter_versions/000001/00000001.json"
+    info = zipfile.ZipInfo(name, (2021, 11, 3, 12, 30, 46))
+    if unix_time is not None:
+        info.extra = struct.pack("<HHBi", 0x5455, 5, 1, unix_time)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("book/project_state.json", '{"novel_id":"book"}')
+        archive.writestr(info, '{"title":"A","text":"old draft"}')
+    project_archive.import_project_archive(buffer.getvalue(), tmp_path)
+    expected = unix_time or int(datetime(*info.date_time).timestamp())
+    assert (tmp_path / name).stat().st_mtime_ns == expected * 1_000_000_000
+
+
+def test_damaged_historical_draft_leaves_current_and_other_versions_available(project, tmp_path, monkeypatch):
+    manager, client = project
+    manager.replace_chapter_text(1, "第二稿。")
+    manager.replace_chapter_text(1, "正式稿。")
+    damaged = next((manager.base_dir / "chapter_versions").rglob("00000001.json"))
+    damaged.write_bytes(b"{")
+    backup = client.get("/api/novel/book/export_backup").content
+    restored = tmp_path / "imported"
+    monkeypatch.setenv("OUTPUT_DIR", str(restored))
+    get_settings.cache_clear()
+    response = client.post("/api/novels/import", files={"file": ("book.zip", backup, "application/zip")})
+    assert response.status_code == 200
+    assert "历史版本 1 无法读取" in response.json()["warnings"][0]
+    current = client.get("/api/novel/book/chapter/1").json()
+    assert current["chapter"]["full_text"] == "正式稿。"
+    url = "/api/novel/book/chapter/1/versions"
+    assert client.get(url + "/2").json()["version"]["text"] == "第二稿。"
+    assert client.get(url + "/1").status_code == 409
+    assert client.post(url + "/1", json={"expected_revision": current["revision"]}).status_code == 409
+    assert client.get("/api/novel/book/chapter/1").json() == current
+    assert (restored / "book" / damaged.relative_to(manager.base_dir)).read_bytes() == b"{"
+
+
+def test_backup_stores_only_members_that_would_exceed_the_restore_ratio(project, tmp_path, monkeypatch):
+    manager, client = project
+    manuscript = "雨落在旧码头。" * 5000
+    manager.append_manual_chapter("码头", manuscript)
+    monkeypatch.setattr(project_archive, "MAX_COMPRESSION_RATIO", 30)
+    response = client.get("/api/novel/book/export_backup")
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.getinfo("book/chapters/chapter_002.txt").compress_type == zipfile.ZIP_STORED
+        assert archive.getinfo("book/chapters/chapter_001.txt").compress_type == zipfile.ZIP_DEFLATED
+        assert all(info.file_size <= 30 * info.compress_size for info in archive.infolist())
+    restored = tmp_path / "restored"
+    project_archive.import_project_archive(response.content, restored)
+    assert StateManager.read_project_chapter("book", 2, str(restored)).full_text == manuscript
 
 
 def test_empty_book_cannot_produce_epub(project):
