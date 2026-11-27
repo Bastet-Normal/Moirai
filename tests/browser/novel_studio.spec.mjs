@@ -12,6 +12,9 @@ const test = runner.extend({
     }
 });
 
+// The remote macOS runner may spend several seconds rasterising the first canvas.
+const graphExpect = expect.configure({timeout:20_000});
+
 async function openDemoNovel(page) {
     const response = await page.goto('/');
     expect(response?.ok).toBeTruthy();
@@ -213,7 +216,6 @@ test('the caret stays on the last line of a long wrapped chapter', async ({safar
 
 test('blank workspace clicks leave the outline off and a single graph node stays readable', async ({safariPage:page}) => {
     test.setTimeout(120_000);
-    const graphExpect = expect.configure({timeout:20_000});
     await openDemoNovel(page);
     await page.getByRole('tab', {name:'世界观', exact:true}).click();
     const point = await page.locator('.workspace-heading').evaluate(el => {
@@ -608,17 +610,19 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
 });
 
 test('reference tools locate people, follow planted clues and open unwritten outlines', async ({safariPage: page}) => {
+    test.setTimeout(90_000);
     await page.goto('/');
     const shelf = page.getByRole('button', {name:'书架', exact:true});
     if (await shelf.isVisible()) await shelf.click();
     await page.getByRole('button', {name:'打开作品：群星航路', exact:true}).click();
-    await page.getByRole('tab', {name:'实体图谱', exact:true}).click();
-    await expect.poll(() => page.locator('#graph-entity option').count()).toBe(8);
+    const tabs = page.getByRole('tablist', {name:'群星航路 · 作品工作区', exact:true});
+    await tabs.getByRole('tab', {name:'实体图谱', exact:true}).click();
+    await graphExpect.poll(() => page.locator('#graph-entity option').count()).toBe(8);
     await page.locator('#graph-entity').selectOption('南薇');
-    await expect.poll(() => page.locator('#graph-relations').textContent()).toContain('沈星 → 委托 → 南薇');
+    await graphExpect.poll(() => page.locator('#graph-relations').textContent()).toContain('沈星 → 委托 → 南薇');
     const portrait = await page.evaluate(() => cyInstance.$id('南薇').data('symbolImage'));
     await page.getByRole('button', {name:'查看人物卡', exact:true}).click();
-    await expect.poll(() => page.evaluate(() => document.activeElement.id)).toBe('reference-character:demo_beta_nanwei');
+    await graphExpect.poll(() => page.evaluate(() => document.activeElement.id)).toBe('reference-character:demo_beta_nanwei');
     expect(await page.evaluate(() => document.activeElement.closest('.person-card').querySelector('img').getAttribute('src'))).toBe(portrait);
     await page.getByRole('tab', {name:'人物卡', exact:true}).click();
     await page.locator('#characters-search').fill('天文台');
