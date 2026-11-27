@@ -4782,27 +4782,36 @@
         let composing = false;
         let lastValue = null;
         let frame = 0;
-        let previousWidth = 0, previousHeight = 0;
-        let followingEnd = false;
+        let previousWidth = 0, previousHeight = 0, previousLimit = 0;
+
+        function syncViewport() {
+            const width = field.clientWidth, height = field.clientHeight;
+            const limit = field.scrollHeight - height;
+            const oldLimit = previousLimit;
+            const resized = previousWidth && previousHeight &&
+                (width !== previousWidth || height !== previousHeight);
+            previousWidth = width;
+            previousHeight = height;
+            previousLimit = limit;
+            // Match the old bottom coordinate so scrolling up with the caret at
+            // the end of the manuscript leaves the reader's position alone.
+            function followOldBottom() {
+                if (Math.abs(field.scrollTop - oldLimit) <= 1 &&
+                    field.selectionStart === field.value.length && field.selectionEnd === field.value.length) {
+                    field.scrollTop = field.scrollHeight;
+                }
+            }
+            if (resized && width && height) {
+                followOldBottom();
+                // Native Safari can restore the pre-resize offset after layout.
+                requestAnimationFrame(() => { followOldBottom(); schedule(); });
+            }
+        }
 
         function draw() {
             frame = 0;
-            const width = field.clientWidth, viewportHeight = field.clientHeight;
-            if (!width || !viewportHeight) {
-                followingEnd = false;
-                surface.removeAttribute('data-caret');
-                return;
-            }
+            syncViewport();
             const value = field.value;
-            const atEnd = field.selectionStart === value.length && field.selectionEnd === value.length;
-            // Safari can transfer focus to the window during a resize. Preserve the
-            // scroll anchor independently of whether the insertion caret is painted.
-            if (followingEnd && atEnd && (width !== previousWidth || viewportHeight !== previousHeight)) {
-                field.scrollTop = field.scrollHeight;
-            }
-            previousWidth = width;
-            previousHeight = viewportHeight;
-            followingEnd = atEnd && field.scrollHeight - viewportHeight - field.scrollTop <= 1;
             if (document.activeElement !== field || composing || forcedColors.matches ||
                 field.selectionStart !== field.selectionEnd) {
                 surface.removeAttribute('data-caret');
@@ -4852,7 +4861,7 @@
         });
         field.addEventListener('compositionend', () => { composing = false; schedule(); });
         forcedColors.addEventListener('change', schedule);
-        new ResizeObserver(schedule).observe(field);
+        new ResizeObserver(() => { syncViewport(); schedule(); }).observe(field);
         document.fonts.addEventListener('loadingdone', schedule);
     }
 
