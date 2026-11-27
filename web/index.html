@@ -2696,6 +2696,7 @@
     }
 
     function openStudioHome() {
+        closeEntityGraph();
         complianceController?.abort();
         novelLoadToken++;
         chapterLoadToken++;
@@ -2744,6 +2745,7 @@
     }
 
     async function selectNovel(novelId, { preserveView = false, chapterNumber = null } = {}) {
+        if (novelId !== currentNovelId) closeEntityGraph();
         const view = preserveView && currentNovelId === novelId && novelData ? captureWorkspaceView() : null;
         const token = ++novelLoadToken;
         complianceController?.abort();
@@ -3797,7 +3799,7 @@
             updateReaderProgress();
         }
         if (tabName === 'branching' && novelData) renderBranching();
-        if (tabName === 'graph') setTimeout(() => { if (activeTab === 'graph' && novelData) renderCytoscapeGraph(); }, 80);
+        if (tabName === 'graph' && novelData) renderCytoscapeGraph();
     }
 
     function tabKeydown(event) {
@@ -4984,14 +4986,7 @@
         const res = await fetch(`/api/novel/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'If-Match': revision } });
         if (res.ok) {
             showToast('作品已移入本机回收目录', 'success');
-            if (currentNovelId === id) {
-                novelLoadToken++;
-                chapterLoadToken++;
-                sortedChapters = [];
-                currentNovelId = ''; novelData = null; selectedChapterIdx = 0; selectedChapterNum = 0;
-                document.getElementById('novel-workspace').classList.add('hidden');
-                document.getElementById('welcome-view').classList.remove('hidden');
-                    }
+            if (currentNovelId === id) openStudioHome();
             loadNovels();
         } else { const err = await res.json().catch(() => ({})); showToast(err.detail || '删除失败', 'error'); }
     }

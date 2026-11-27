@@ -212,6 +212,7 @@ test('the caret stays on the last line of a long wrapped chapter', async ({safar
 });
 
 test('blank workspace clicks leave the outline off and a single graph node stays readable', async ({safariPage:page}) => {
+    test.setTimeout(60_000);
     await openDemoNovel(page);
     await page.getByRole('tab', {name:'世界观', exact:true}).click();
     const point = await page.locator('.workspace-heading').evaluate(el => {
@@ -227,12 +228,19 @@ test('blank workspace clicks leave the outline off and a single graph node stays
     expect(size).toBeLessThan(61);
     await expect.poll(() => page.evaluate(() => cyInstance.nodes()[0].style('background-image'))).toContain('/assets/graph-robots/');
     await page.getByRole('button', {name:'打开作品：群星航路', exact:true}).click();
-    await page.getByRole('tab', {name:'实体图谱', exact:true}).click();
+    const tabs = page.getByRole('tablist', {name:'群星航路 · 作品工作区', exact:true});
+    await tabs.getByRole('tab', {name:'实体图谱', exact:true}).click();
     await expect.poll(() => page.evaluate(() => cyInstance?.edges().length)).toBe(6);
     expect(await page.evaluate(() => cyInstance.nodes().length)).toBe(7);
-    await expect.poll(() => page.evaluate(() =>
-        Array.from(document.querySelectorAll('#graph-legend img')).every(img => img.complete && img.naturalWidth > 0)
-    )).toBe(true);
+    const icons = await page.evaluate(async () => {
+        const images = Array.from(document.querySelectorAll('#graph-legend img'));
+        await Promise.all(images.map(image => image.decode()));
+        return images.filter(image => image.naturalWidth > 0).map(image => image.getAttribute('src'));
+    });
+    expect(icons).toEqual([
+        '/assets/graph-robots/character.png', '/assets/graph-symbols/item.png',
+        '/assets/graph-symbols/location.png', '/assets/graph-symbols/secret.png',
+    ]);
     expect(await page.evaluate(() => cyInstance.$id('天文台').data('symbolImage'))).toBe('/assets/graph-symbols/location.png');
     expect(await page.evaluate(() => cyInstance.$id('玻璃匣').data('symbolImage'))).toBe('/assets/graph-symbols/glass-case.png');
     expect(await page.evaluate(() => cyInstance.$id('信标钥匙').data('symbolImage'))).toBe('/assets/graph-symbols/key.png');

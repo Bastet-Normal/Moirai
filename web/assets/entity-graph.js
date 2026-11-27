@@ -109,6 +109,12 @@ function treeGraphPositions(cy) {
     return node => positions.get(node.id());
 }
 
+function closeEntityGraph() {
+    cyInstance?.destroy();
+    cyInstance = null;
+    renderedGraph = null;
+}
+
 function zoomGraph(factor) {
     if (!cyInstance) return;
     const point = cyInstance.nodes(':selected').first().renderedPosition();
