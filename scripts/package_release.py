@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 _DIRECTORIES = ("agents", "api", "config", "core", "pipeline", "services", "web/assets")
-_ROOT_FILES = ("README.md", ".env.example", "main.py", "web_ui.py", "requirements.lock", "requirements.txt")
+_ROOT_FILES = ("README.md", "ARCHITECTURE.md", ".env.example", "main.py", "web_ui.py", "requirements.lock", "requirements.txt")
 _LAUNCH_FILES = ("launch.py", "launch.command", "launch.bat", "serve_demo.py")
 
 

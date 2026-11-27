@@ -561,6 +561,24 @@ class TestChineseMemoryRecall(unittest.TestCase):
 
 
 class TestKnowledgeGraphIdentity(unittest.TestCase):
+    def test_relation_endpoints_keep_their_identity_when_the_type_becomes_known(self):
+        graph = KnowledgeGraph()
+        graph.add_relation("林岚", "旧港", "到访", chapter=2)
+        self.assertEqual(graph.nodes["旧港"].entity_type, "OTHER")
+        node_id = graph.nodes["旧港"].id
+        graph = KnowledgeGraph.model_validate_json(graph.model_dump_json())
+        graph.upsert_node("旧港", "LOCATION", chapter=4)
+        graph.upsert_node("林岚", "CHARACTER", chapter=4)
+        self.assertEqual(graph.nodes["旧港"].id, node_id)
+        self.assertEqual(graph.nodes["旧港"].entity_type, "LOCATION")
+        self.assertEqual(graph.nodes["旧港"].first_seen_chapter, 2)
+        self.assertEqual(graph.nodes["林岚"].entity_type, "CHARACTER")
+        self.assertEqual(graph.edges[0].target_name, "旧港")
+
+        graph.upsert_node("旧钥匙", "CHARACTER", chapter=1)  # Legacy implicit endpoint.
+        graph.upsert_node("旧钥匙", "ITEM", chapter=4)
+        self.assertEqual(graph.nodes["旧钥匙"].entity_type, "ITEM")
+
     def test_node_ids_are_stable_and_relation_origin_is_preserved(self):
         first = KnowledgeGraph()
         first.upsert_node("青铜罗盘", chapter=1)

@@ -1,4 +1,4 @@
-// Unit tests execute the actual inline application script with a minimal DOM.
+// Unit tests execute the browser application scripts with a minimal DOM.
 // They deliberately do not use a real browser, user data, or any model provider.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8')
 const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1]).find(code => code.includes('function selectNovel'));
 assert.ok(script);
+const graphScript = readFileSync(new URL('../web/assets/entity-graph.js', import.meta.url), 'utf8');
 
 class Element {
     constructor(id = '') {
@@ -96,6 +97,7 @@ function setup({workspace = false} = {}) {
         fetch: (url, options = {}) => new Promise((resolve, reject) => requests.push({url, options, resolve, reject})),
     });
     const run = code => vm.runInContext(code, context);
+    run(graphScript);
     run(script);
     // Renderers are outside the race tests' scope; fetch/lifecycle/save functions
     // remain the exact production implementations.
@@ -338,9 +340,9 @@ test('dynamic actions use native buttons and escape contextual accessible names'
     s.bind('a');
     s.run(`window._novels=[{novel_id:'a', title:'书"<script>', genre:'测试', total_generated_chapters:1, total_words:3}]; productionNovelList();
         novelData.characters=[{name:'角色"<script>',role:'主角',personality_tags:[], current_state:{level:'境界',equipment_and_items:[]}}]; productionCharacters();`);
-    assert.match(s.el('novels-list').innerHTML, /<button onclick="selectNovel/);
+    assert.match(s.el('novels-list').innerHTML, /<button\b[^>]*\bonclick="selectNovel/);
     assert.match(s.el('novels-list').innerHTML, /aria-label="打开作品：书&quot;&lt;script&gt;"/);
-    assert.match(s.el('tab-characters').innerHTML, /aria-label="编辑角色：角色&quot;&lt;script&gt;"/);
+    assert.match(s.el('character-list').innerHTML, /aria-label="编辑角色：角色&quot;&lt;script&gt;"/);
     assert.doesNotMatch(s.el('novels-list').innerHTML, /<div onclick=/);
 });
 
@@ -353,25 +355,55 @@ test('unplanned bookshelf entries remain distinguishable by project id', () => {
     ]; productionNovelList();`);
     const html = s.el('novels-list').innerHTML;
     assert.match(html, /打开作品：未策划 · qa_error_boundary/);
-    assert.match(html, /《未策划 · second_partial》/);
+    assert.match(html, /<strong>未策划 · second_partial<\/strong>/);
 });
 
-test('graph colors are accepted by the shipped renderer in both themes', () => {
-    const s=setup();
+test('graph symbols distinguish entity types and preserve their identity when inactive', () => {
+    const s = setup();
     s.bind('a');
-    s.run('var graphOptions; cytoscape=options=>{graphOptions=options; return {nodes:()=>[],destroy(){}}}; novelData.cytoscape_data={elements:[]};');
-    for (const dark of [false,true]) {
-        s.document.documentElement.classList.toggle('dark',dark);
+    const roles = ['CHARACTER', 'ITEM', 'FACTION', 'LOCATION', 'SECRET', 'EVENT', 'unknown'];
+    const elements = roles.map(type => ({data:{id:type, label:type, type}}));
+    elements.push({data:{id:'lost', label:'旧钥匙', type:'ITEM', status:'DESTROYED'}});
+    elements.push({data:{id:'edge', source:'CHARACTER', target:'ITEM', label:'保管'}});
+    s.document.createTestGraph = serialized => cytoscape({headless:true, elements:JSON.parse(serialized), layout:{name:'preset'}});
+    s.run(`var graphOptions; cytoscape = options => {
+        graphOptions = options;
+        return document.createTestGraph(JSON.stringify(options.elements));
+    };
+        novelData.cytoscape_data = {elements:${JSON.stringify(elements)}};`);
+    for (const dark of [false, true]) {
+        s.document.documentElement.classList.toggle('dark', dark);
         s.run('renderCytoscapeGraph()');
-        const style=JSON.parse(s.run('JSON.stringify(graphOptions.style)'));
-        const cy=cytoscape({headless:true,styleEnabled:true,layout:{name:'preset'},style,
-            elements:[{data:{id:'a',label:'A'}},{data:{id:'b',label:'B'}},{data:{id:'edge',source:'a',target:'b',label:'关联'}}]});
+        assert.equal(s.run("cyInstance.nodes(':selected').id()"), 'CHARACTER');
+        assert.equal(s.run("cyInstance.edges('.inspected').length"), 1);
+        assert.equal(s.run("cyInstance.$id('ITEM').hasClass('muted')"), false);
+        assert.equal(s.run("cyInstance.$id('LOCATION').hasClass('muted')"), true);
+        const {style, elements:rendered} = JSON.parse(s.run('JSON.stringify(graphOptions)'));
+        const cy = cytoscape({headless:true, styleEnabled:true, layout:{name:'preset'}, style, elements:rendered});
         try {
-            const expected=dark?'rgb(71,85,105)':'rgb(203,213,225)';
-            assert.equal(cy.edges().style('line-color'),expected);
-            assert.equal(cy.edges().style('target-arrow-color'),expected);
+            const models = {ITEM:'item', FACTION:'faction', LOCATION:'location', SECRET:'secret', EVENT:'event', unknown:'other'};
+            for (const node of cy.nodes()) {
+                const path = node.data('symbolImage');
+                const type = node.data('type');
+                if (type === 'CHARACTER') assert.match(path, /^\/assets\/graph-robots\/(character|scout)\.png$/);
+                else assert.equal(path, '/assets/graph-symbols/' + (node.id() === 'lost' ? 'key' : models[type]) + '.png');
+                assert.equal(readFileSync(new URL('../web' + path, import.meta.url)).toString('ascii',1,4), 'PNG');
+                assert.ok(node.style('background-image').includes(path));
+            }
+            assert.equal(cy.$id('lost').data('displayLabel'), '旧钥匙 · 已毁灭');
+            assert.equal(Number(cy.$id('lost').style('background-image-opacity')), 0.65);
+            assert.match(s.el('graph-legend').innerHTML, /graph-symbols\/location.png[^>]*>地点/);
+            assert.match(s.el('graph-entity').innerHTML, /旧钥匙 · 已毁灭（物品）/);
+            assert.deepEqual(cy.edges()[0].data(), elements.at(-1).data);
+            assert.equal(cy.edges().style('target-arrow-color'), dark ? 'rgb(126,147,140)' : 'rgb(147,165,155)');
         } finally { cy.destroy(); }
     }
+    s.run("inspectGraphEntity('LOCATION')");
+    assert.equal(s.run("cyInstance.edges('.muted').length"), 1);
+    assert.equal(s.run("cyInstance.$id('ITEM').hasClass('muted')"), true);
+    s.run("inspectGraphEntity('')");
+    assert.equal(s.run("cyInstance.elements('.muted, .inspected, :selected').length"), 0);
+    s.run('cyInstance.destroy()');
 });
 
 test('generation counts are validated instead of silently defaulted or rounded', async () => {
@@ -890,7 +922,18 @@ test('audit history is escaped and human review advances the bound revision', as
     await s.run('openAuditHistoryModal()');
     assert.match(s.el('audit-history-list').innerHTML, /&lt;img/);
     assert.doesNotMatch(s.el('audit-history-list').innerHTML, /<img src=x/);
-    s.el('human-review-decision').value = 'approved';
+    assert.equal(s.run('humanReviewDecision()'), '');
+    assert.equal(s.el('save-human-review').disabled, true);
+    await assert.rejects(s.run('saveHumanReview()'), /请选择本次审阅结论/);
+    s.el('review-changes').checked = true;
+    s.el('human-review-note').value = '  ';
+    s.run('syncHumanReviewForm()');
+    assert.equal(s.el('human-review-note').required, true);
+    assert.equal(s.el('save-human-review').disabled, true);
+    await assert.rejects(s.run('saveHumanReview()'), /请填写具体意见/);
+    assert.equal(s.requests.length, 0);
+    s.el('review-changes').checked = false;
+    s.el('review-approved').checked = true;
     s.el('human-review-note').value = '作者已通读';
     const saving = s.run('saveHumanReview()');
     assert.deepEqual(JSON.parse(s.requests[0].options.body), {
@@ -907,6 +950,8 @@ test('audit history is escaped and human review advances the bound revision', as
     assert.equal(s.run('sortedChapters[0].current_human_review.note'), '作者已通读');
     assert.match(s.el('current-chapter-meta').textContent, /人工已认可/);
     assert.equal(s.el('human-review-note').value, '');
+    assert.equal(s.run('humanReviewDecision()'), '');
+    assert.equal(s.el('save-human-review').disabled, true);
 });
 
 test('human review drafts are isolated by chapter and by its prose version', async () => {
@@ -918,17 +963,24 @@ test('human review drafts are isolated by chapter and by its prose version', asy
         selectedChapterIdx = 0; selectedChapterNum = 1;`);
     await s.run('openAuditHistoryModal()');
     s.el('human-review-note').value = '仅针对第一章';
-    s.el('human-review-decision').value = 'changes_requested';
+    s.el('review-changes').checked = true;
     s.run("closeModal('modal-audit-history'); selectedChapterIdx = 1; selectedChapterNum = 2;");
     await s.run('openAuditHistoryModal()');
     assert.equal(s.el('human-review-note').value, '');
-    assert.equal(s.el('human-review-decision').value, 'approved');
+    assert.equal(s.run('humanReviewDecision()'), '');
+    s.el('review-approved').checked = true;
     s.run("closeModal('modal-audit-history'); selectedChapterIdx = 0; selectedChapterNum = 1;");
     await s.run('openAuditHistoryModal()');
     assert.equal(s.el('human-review-note').value, '仅针对第一章');
+    assert.equal(s.run('humanReviewDecision()'), 'changes_requested');
     s.run("closeModal('modal-audit-history'); sortedChapters[0].prose_sha256='changed'");
     await s.run('openAuditHistoryModal()');
     assert.equal(s.el('human-review-note').value, '');
+    assert.equal(s.run('humanReviewDecision()'), '');
+    s.run("closeModal('modal-audit-history'); selectedChapterIdx = 1; selectedChapterNum = 2;");
+    await s.run('openAuditHistoryModal()');
+    assert.equal(s.run('humanReviewDecision()'), 'approved');
+    assert.equal(s.el('save-human-review').disabled, false);
 });
 
 test('opening source evidence keeps focus in the same review without changing the chapter', async () => {
@@ -944,7 +996,7 @@ test('opening source evidence keeps focus in the same review without changing th
     assert.equal(s.run('selectedChapterNum'), 2);
     assert.equal(s.el('modal-audit-history').classList.contains('open'), true);
     assert.equal(s.el('human-review-note').value, '继续输入这条意见');
-    assert.match(s.el('audit-source-text').textContent, /线索就在这里/);
+    assert.match(s.el('audit-source-text').innerHTML, /<mark>线索就在这里。<\/mark>/);
 });
 
 test('the audit summary distinguishes partial retrieval and an unavailable model from a clean book', () => {
@@ -980,6 +1032,7 @@ test('late human review acknowledgement never paints a newly selected project', 
         novelData.chapters=sortedChapters; selectedChapterIdx=0; selectedChapterNum=1;
     `);
     await s.run('openAuditHistoryModal()');
+    s.el('review-approved').checked = true;
     const saving = s.run('saveHumanReview()');
     s.bind('b', 'b'.repeat(64));
     s.run("sortedChapters=[]; selectedChapterNum=0");
@@ -1037,6 +1090,19 @@ test('welcome resumes the last opened project and falls back to the library orde
     s.run('window._novels = []; renderRecentWork()');
     assert.ok(s.el('recent-work').classList.contains('hidden'));
     assert.equal(s.el('recent-work-content').innerHTML, '');
+});
+
+test('a late desk excerpt cannot replace the newly featured manuscript', async () => {
+    const s = setup();
+    s.run("window._novels = [{novel_id:'a', current_chapter:2},{novel_id:'b', current_chapter:3}]");
+    const old = s.run('renderRecentWork()');
+    const current = s.run("localStorage.setItem('moirai_recent_project','b'); renderRecentWork()");
+    s.respond(s.requests[1], {novel_id:'b', chapter:{chapter_number:3, title:'舟', excerpt:'乙'}});
+    await current;
+    s.respond(s.requests[0], {novel_id:'a', chapter:{chapter_number:2, title:'桥', excerpt:'甲'}});
+    await old;
+    assert.equal(s.el('desk-excerpt').textContent, '乙');
+    assert.match(s.el('desk-chapter-title').textContent, /第 3 章.*舟/);
 });
 
 test('manuscript preview preserves ordered chapter prose and introductory matter', () => {
@@ -1364,4 +1430,80 @@ test('a partial planner checkpoint opens as read-only and keeps recovery availab
         openConceptModal()
     `);
     assert.match(s.run('toasts.at(-1).message'), /只读检查点/);
+});
+
+test('the outline joins planned chapters and existing prose without inventing actions', () => {
+    const s = setup();
+    s.bind();
+    s.run(`
+        sortedChapters = [{chapter_number:1,title:'旧标题',volume_number:1},{chapter_number:2,title:'仅有正文',volume_number:2}];
+        novelData.global_outline = {volumes:[{volume_number:1,chapters:[
+            {chapter_number:1,title:'改稿计划'}, {chapter_number:3,title:'<未来章>'}
+        ]}]};
+    `);
+    const render = filter => {
+        s.el('outline-filter').value = filter;
+        s.run('renderOutlineTab()');
+        return s.el('outline-container').innerHTML;
+    };
+    const all = render('all');
+    assert.equal((all.match(/class="outline-chapter"/g) || []).length, 3);
+    assert.match(all, /openOutlineModal\(1\)/);
+    assert.match(all, /readReferenceChapter\(1\)/);
+    assert.match(all, /readReferenceChapter\(2\)/);
+    assert.doesNotMatch(all, /openOutlineModal\(2\)|readReferenceChapter\(3\)/);
+    assert.doesNotMatch(render('written'), /&lt;未来章&gt;/);
+    const planned = render('planned');
+    assert.match(planned, /&lt;未来章&gt;/);
+    assert.doesNotMatch(planned, /仅有正文|改稿计划/);
+    s.run('novelData.global_outline=null; novelData.imported_manuscript=true');
+    assert.match(render('all'), /仅有正文/);
+    assert.match(render('all'), /建立续写规划/);
+});
+
+test('hook filters distinguish unresolved records from payoffs and link only existing chapters', () => {
+    const s = setup();
+    s.bind();
+    s.run(`
+        sortedChapters=[{chapter_number:1}];
+        novelData.foreshadowings=[
+            {hook_id:'first',title:'起点',status:'DEVELOPING',planted_chapter:1,expected_resolution_volume:2},
+            {hook_id:'later',title:'消失的信',status:'RESOLVED',planted_chapter:8,expected_resolution_volume:2,resolution_notes:'<原委>'}
+        ];
+    `);
+    s.el('hooks-filter').value='open';
+    s.run('renderForeshadowing()');
+    assert.match(s.el('hooks-count').textContent, /1 条待回收 · 1 条已揭晓/);
+    assert.match(s.el('foreshadowing-grid').innerHTML, /readReferenceChapter\(1\)/);
+    assert.doesNotMatch(s.el('foreshadowing-grid').innerHTML, /消失的信/);
+    s.el('hooks-filter').value='resolved';
+    s.run('renderForeshadowing()');
+    assert.match(s.el('foreshadowing-grid').innerHTML, /&lt;原委&gt;/);
+    assert.doesNotMatch(s.el('foreshadowing-grid').innerHTML, /readReferenceChapter|起点/);
+});
+
+test('character search includes current location and keeps checkpoint portraits read only', () => {
+    const s = setup();
+    s.bind();
+    s.run("novelData.characters=[{id:'a',name:'南薇',role:'校对员',current_state:{location:'天文台',level:'初始等级',hp_status:'健康良好',current_mood:'平静警惕'},background:'她能打开玻璃匣。灯塔来信。'},{id:'b',name:'泊岸',secrets_and_goals:['找回<旧信>'],current_state:{location:'新手村'}}]");
+    s.el('characters-search').value = '天文台';
+    s.run('productionCharacters()');
+    const [front, details] = s.el('character-list').innerHTML.split('<details>');
+    assert.match(front, /class="person-premise">她能打开玻璃匣。<\/p>/);
+    assert.match(front, /天文台/);
+    assert.doesNotMatch(front, /初始等级|健康良好|平静警惕|灯塔来信/);
+    for (const value of ['初始等级','健康良好','平静警惕','灯塔来信']) assert.ok(details.includes(value));
+    assert.match(s.el('character-list').innerHTML, /编辑角色：南薇/);
+    assert.doesNotMatch(s.el('character-list').innerHTML, /泊岸/);
+    s.run('novelData.planning_checkpoint=true; productionCharacters()');
+    assert.doesNotMatch(s.el('character-list').innerHTML, /openCharacterModal/);
+    s.el('characters-search').value = '不存在';
+    s.run('productionCharacters()');
+    assert.match(s.el('character-list').innerHTML, /清空搜索/);
+    s.run('clearCharacterSearch()');
+    assert.equal(s.el('characters-count').textContent, '2 人');
+    const second = s.el('character-list').innerHTML.split('<article class="person-card">')[2];
+    assert.match(second.split('<details>')[0], /找回&lt;旧信&gt;/);
+    assert.doesNotMatch(second.split('<details>')[0], /新手村/);
+    assert.match(second.split('<details>')[1], /新手村/);
 });

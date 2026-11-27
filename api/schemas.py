@@ -164,6 +164,7 @@ class ReaderSimRequest(ProjectRevisionRequest):
 
 
 class PatchParagraphRequest(ProjectRevisionRequest):
+    paragraph_index: int | None = Field(default=None, strict=True, ge=0)
     name: Text = Field(min_length=1, max_length=64)
     chapter: ChapterNumber
     old_text: Text = Field(max_length=MAX_CHAPTER_TEXT_CHARS)
@@ -175,6 +176,11 @@ class ConceptUpdateRequest(ProjectRevisionRequest):
     genre: Text | None = Field(default=None, max_length=200)
     logline: Text | None = Field(default=None, max_length=10_000)
     golden_finger: Text | None = Field(default=None, max_length=20_000)
+
+
+class WorldBackgroundRequest(ProjectRevisionRequest):
+    world_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200), AfterValidator(valid_text)] | None = None
+    geography_overview: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000), AfterValidator(valid_text)]
 
 
 class CharacterUpdateRequest(ProjectRevisionRequest):

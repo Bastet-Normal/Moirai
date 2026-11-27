@@ -58,7 +58,7 @@ from core.storage import (
     remove_file,
     revision_token,
 )
-from core.text_limits import check_chapter_length, check_replacement_length
+from core.text_limits import check_chapter_length, check_replacement_length, replace_paragraph_at
 
 console = Console()
 logger = logging.getLogger("novelengine.state")
@@ -2162,31 +2162,38 @@ class StateManager:
             self._save_chapter_metadata(chapter)
             return review.model_copy(deep=True)
 
-    @project_mutation
     def patch_paragraph(
         self,
         chapter_number: int,
         old_text_snippet: str,
         new_text_snippet: str,
         *,
+        paragraph_index: int | None = None,
         mark_reconciliation: bool = False,
     ) -> bool:
-        """段落级微手术局部修改"""
-        if chapter_number not in self.state.chapters:
-            return False
-        # 空匹配串会在位置 0 命中并向正文头部注入内容，必须拒绝
-        if not old_text_snippet:
-            return False
-        chap = self.state.chapters[chapter_number].model_copy(deep=True)
-        if old_text_snippet in chap.full_text:
-            check_replacement_length(chap.full_text, old_text_snippet, new_text_snippet, count=1)
-            chap.full_text = chap.full_text.replace(old_text_snippet, new_text_snippet, 1)
-            chap.word_count = len([c for c in chap.full_text if '\u4e00' <= c <= '\u9fff'])
-            self.save_chapter(chap)
-            if mark_reconciliation:
-                self.mark_state_reconciliation_required(chapter_number, "paragraph edited without state extraction")
+        """Replace the selected paragraph, or the first matching snippet for legacy callers."""
+        with self.operation():
+            source = self.state.chapters.get(chapter_number)
+            if source is None or not old_text_snippet:
+                return False
+            text = source.full_text
+            if paragraph_index is None:
+                if old_text_snippet not in text:
+                    return False
+                check_replacement_length(text, old_text_snippet, new_text_snippet, count=1)
+                updated = text.replace(old_text_snippet, new_text_snippet, 1)
+            else:
+                updated = replace_paragraph_at(text, paragraph_index, new_text_snippet, expected=old_text_snippet)
+                if updated is None:
+                    return False
+            chap = source.model_copy(deep=True)
+            chap.full_text = updated
+            chap.word_count = sum('\u4e00' <= char <= '\u9fff' for char in chap.full_text)
+            with self.mutation():
+                self.save_chapter(chap)
+                if mark_reconciliation:
+                    self.mark_state_reconciliation_required(chapter_number, "paragraph edited without state extraction")
             return True
-        return False
 
     def state_before_chapter(self, chapter_num: int) -> tuple[NovelProjectState, KnowledgeGraph]:
         """Return a detached pre-chapter view, never infer history from current facts.

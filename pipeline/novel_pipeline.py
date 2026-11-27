@@ -367,15 +367,28 @@ class NovelPipeline:
     def simulate_chapter_branching(self, chapter_number: int) -> BranchingSimulationResult:
         """在关键章节触发 Tree-of-Thoughts 3 条剧情分支沙盒推演"""
         state = self.state_manager.state
-        context = self.state_manager.build_chapter_context(chapter_number)
-        current_situation = f"本章目标冲突: {context.get('main_conflict')}。当前主角处于: {context.get('chapter_summary')}"
+        _, outline = self.state_manager.get_chapter_outline(chapter_number) or (None, None)
+        chapter = state.chapters.get(chapter_number)
+        if chapter and not (outline and (outline.main_conflict or outline.summary)):
+            text = chapter.full_text
+            excerpt = text if len(text) <= 1200 else text[:600] + "\n…\n" + text[-600:]
+            current_situation = f"第 {chapter_number} 章《{chapter.title}》正文摘录：\n{excerpt}"
+            # Imported prose may have no historical character state.
+            characters = []
+        else:
+            historical, _ = self.state_manager.state_before_chapter(chapter_number)
+            characters = list(historical.characters.values())
+            current_situation = (
+                f"本章冲突：{outline.main_conflict}。章节概要：{outline.summary}"
+                if outline else f"构思第 {chapter_number} 章"
+            )
 
         with console.status(f"[bold yellow]Tree-of-Thoughts 引擎正在推演第 {chapter_number} 章的 3 种不同命运走向..."):
             branch_result = self.narrative_brancher.simulate_branches(
                 chapter_number=chapter_number,
                 novel_concept=state.concept,
                 world_setting=state.world_setting,
-                characters=list(state.characters.values()),
+                characters=characters,
                 current_situation=current_situation,
             )
             self.state_manager.save_branch_simulation(chapter_number, branch_result)

@@ -344,3 +344,27 @@ def test_revision_is_project_bound(project):
     from core.storage import revision_token
 
     assert revision_token("a", ("same", None)) != revision_token("b", ("same", None))
+
+
+def test_manual_paragraph_edit_targets_the_selected_occurrence(project):
+    manager, client = project
+    text = "同一句。\n\n\n\n  \n\n同一句。\n\n尾声。"
+    manager.replace_chapter_text(1, text)
+    body = {
+        "name": "book", "chapter": 1, "old_text": "同一句。", "new_text": "只改第二段。",
+        "expected_revision": manager.revision,
+    }
+    for wrong in (2, 3):
+        result = client.post("/api/novel/patch_paragraph", json={**body, "paragraph_index": wrong})
+        assert result.status_code == 400
+        assert StateManager("book").revision == manager.revision
+    saved = client.post("/api/novel/patch_paragraph", json={**body, "paragraph_index": 1})
+    assert saved.status_code == 200, saved.text
+    assert StateManager("book").state.chapters[1].full_text == "同一句。\n\n\n\n  \n\n只改第二段。\n\n尾声。"
+
+    edited = StateManager("book")
+    rewrite = client.post("/api/novel/book/para_rewrite_apply", json={
+        "chapter": 1, "paragraph_index": 0, "new_text": "改写开头。", "expected_revision": edited.revision,
+    })
+    assert rewrite.status_code == 200, rewrite.text
+    assert StateManager("book").state.chapters[1].full_text == "改写开头。\n\n\n\n  \n\n只改第二段。\n\n尾声。"

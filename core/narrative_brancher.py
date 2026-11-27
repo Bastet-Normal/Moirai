@@ -35,7 +35,7 @@ class NarrativeBrancher:
         self,
         chapter_number: int,
         novel_concept: NovelConcept,
-        world_setting: WorldSetting,
+        world_setting: WorldSetting | None,
         characters: list[CharacterCard],
         current_situation: str,
     ) -> BranchingSimulationResult:
