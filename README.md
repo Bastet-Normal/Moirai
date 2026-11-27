@@ -70,7 +70,7 @@ npm run build:web
 python scripts/check.py
 ```
 
-质量检查涵盖后端测试、前端状态测试、静态检查和依赖一致性。加 `--audit` 可联网核查 Python 锁文件，`npm audit --audit-level=high` 核查前端依赖。macOS 首次启用 Safari 网页自动化后可运行 `npm run test:browser`，在隔离样书上验证实际操作。
+质量检查涵盖后端测试、前端状态测试、静态检查和依赖一致性。加 `--audit` 可联网核查 Python 锁文件，`npm audit --audit-level=high` 核查前端依赖。日常浏览器调试使用无窗口 WebKit。发布前由 GitHub Actions 的远程 macOS 运行器执行 `npm run test:browser`，用原生 Safari 和隔离样书验证编辑、审阅与交稿流程。
 
 从通过检查的源码生成可分发的 ZIP：
 

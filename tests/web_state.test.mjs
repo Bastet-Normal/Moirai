@@ -544,11 +544,13 @@ test('late chapter failures cannot replace the current chapter body', async () =
     s.run("sortedChapters = [1,2].map(n => ({_novelId:'book', _revision:'a'.repeat(64), chapter_number:n,title:'章节',word_count:2}))");
     const old = s.run('showChapter(0)');
     const latest = s.run('showChapter(1)');
+    assert.equal(s.el('btn-chapter-edit').disabled, true);
     s.respond(s.requests[1], {novel_id:'book',revision:'a'.repeat(64),chapter:{chapter_number:2,full_text:'最新正文'}});
     await latest;
     const currentHtml = s.el('current-chapter-body').innerHTML;
     s.requests[0].reject(new Error('late failure'));
     await old;
+    assert.equal(s.el('btn-chapter-edit').disabled, false);
     assert.match(currentHtml, /最新正文/);
     assert.equal(s.el('current-chapter-body').innerHTML, currentHtml);
 });

@@ -57,6 +57,7 @@ export async function launchSafari() {
         async click() {
           const el = await first()
           await driver.wait(() => driver.executeScript(function(el) {
+            if (el.matches(':disabled') || el.closest('[inert]')) return false
             el.scrollIntoView({block:'center',behavior:'instant'})
             const r=el.getBoundingClientRect()
             return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))

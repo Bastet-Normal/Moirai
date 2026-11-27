@@ -1199,7 +1199,7 @@
                                 </div>
                             </div>
                             <div class="chapter-actions">
-                                <button id="btn-chapter-edit" class="btn btn-primary btn-sm" onclick="openChapterEditModal()" title="编辑本章正文" aria-label="编辑本章正文"><i aria-hidden="true" class="fa-solid fa-pen text-[12px]"></i> 编辑正文</button>
+                                <button id="btn-chapter-edit" disabled class="btn btn-primary btn-sm" onclick="openChapterEditModal()" title="编辑本章正文" aria-label="编辑本章正文"><i aria-hidden="true" class="fa-solid fa-pen text-[12px]"></i> 编辑正文</button>
                                 <button id="compliance-chip" type="button" tabindex="0" class="chip chip-danger hidden cursor-pointer" onclick="openCompliancePanel(this)" title="查看合规风险" aria-label="查看合规风险" aria-controls="reader-rail" aria-expanded="false"><i aria-hidden="true" class="fa-solid fa-triangle-exclamation"></i> <span id="compliance-count"></span></button>
                                 <button id="btn-audit-history" class="btn btn-outline btn-sm" onclick="openAuditHistoryModal()" title="查看机器质检与人工审阅历史" disabled><i aria-hidden="true" class="fa-solid fa-clipboard-check"></i> <span>审阅</span></button>
                                 <button id="btn-state-reconcile" class="btn btn-soft btn-sm hidden" onclick="confirmStateReconciliation()" title="保留本章正文，仅调用状态模型提取人物、关系和伏笔变化"><i aria-hidden="true" class="fa-solid fa-list-check"></i> <span class="hidden xl:inline">提取本章状态</span></button>
@@ -2867,6 +2867,7 @@
         // 章节目录（按章节号排序 + 长篇折叠为最新 8 条）
         sortedChapters = [...novelData.chapters].sort((a, b) => a.chapter_number - b.chapter_number);
         const hasChapters = sortedChapters.length > 0;
+        document.getElementById('btn-audit-history').disabled = true;
         const chapterActionTitles = {
             'btn-chapter-edit': '编辑本章正文',
             'btn-outline-edit': '编辑本章细纲（重写后生效）',
@@ -3658,6 +3659,8 @@
         updateStateReconcileButton();
         const requestedNovel = currentNovelId;
         const requestedChapter = chap.chapter_number;
+        const editButton = document.getElementById('btn-chapter-edit');
+        editButton.disabled = true;
         document.getElementById('btn-audit-history').disabled = true;
         document.getElementById('current-chapter-title').innerText = `第 ${chap.chapter_number} 章 ${chap.title}`;
         document.getElementById('current-chapter-meta').innerText = chapterQualityMeta(chap);
@@ -3673,6 +3676,7 @@
         if (token !== chapterLoadToken || currentNovelId !== requestedNovel || selectedChapterNum !== requestedChapter) return;
         updateStateReconcileButton();
         document.getElementById('current-chapter-meta').innerText = chapterQualityMeta(chap);
+        editButton.disabled = false;
         const auditButton = document.getElementById('btn-audit-history');
         auditButton.disabled = false;
         auditButton.title = `查看 ${Array.isArray(chap.audit_history) ? chap.audit_history.length : 0} 次机器质检与 ${Array.isArray(chap.human_review_history) ? chap.human_review_history.length : 0} 次人工审阅`;
@@ -4782,28 +4786,33 @@
 
         function draw() {
             frame = 0;
-            if (document.activeElement !== field || composing || forcedColors.matches ||
-                field.selectionStart !== field.selectionEnd || !field.clientWidth) {
+            const width = field.clientWidth, viewportHeight = field.clientHeight;
+            if (!width || !viewportHeight) {
                 followingEnd = false;
                 surface.removeAttribute('data-caret');
                 return;
             }
-            // Measure the browser's own wrapping, including the empty line after a final Enter.
-            // The sentinel lives only in this hidden measurement node.
             const value = field.value;
+            const atEnd = field.selectionStart === value.length && field.selectionEnd === value.length;
+            // Safari can transfer focus to the window during a resize. Preserve the
+            // scroll anchor independently of whether the insertion caret is painted.
+            if (followingEnd && atEnd && (width !== previousWidth || viewportHeight !== previousHeight)) {
+                field.scrollTop = field.scrollHeight;
+            }
+            previousWidth = width;
+            previousHeight = viewportHeight;
+            followingEnd = atEnd && field.scrollHeight - viewportHeight - field.scrollTop <= 1;
+            if (document.activeElement !== field || composing || forcedColors.matches ||
+                field.selectionStart !== field.selectionEnd) {
+                surface.removeAttribute('data-caret');
+                return;
+            }
+            // A trailing sentinel gives the measurement layer a final empty line.
             if (value !== lastValue) {
                 text.data = value + (value === '' || value.endsWith('\n') ? '\u200b' : '');
                 lastValue = value;
             }
             const style = getComputedStyle(field);
-            const width = field.clientWidth, viewportHeight = field.clientHeight;
-            const atLastCharacter = field.selectionStart === value.length;
-            if (followingEnd && atLastCharacter && (width !== previousWidth || viewportHeight !== previousHeight)) {
-                field.scrollTop = field.scrollHeight;
-            }
-            previousWidth = width;
-            previousHeight = viewportHeight;
-            followingEnd = atLastCharacter && field.scrollHeight - viewportHeight - field.scrollTop <= parseFloat(style.lineHeight) / 2;
             const scrollbarWidth = field.offsetWidth - field.clientWidth;
             mirror.style.width = `calc(100% - ${scrollbarWidth}px)`;
             mirror.style.font = style.font;
@@ -4835,10 +4844,7 @@
         document.addEventListener('selectionchange', () => {
             if (document.activeElement === field) schedule();
         });
-        field.addEventListener('blur', () => {
-            followingEnd = false;
-            surface.removeAttribute('data-caret');
-        });
+        field.addEventListener('blur', () => surface.removeAttribute('data-caret'));
         field.addEventListener('compositionstart', () => {
             composing = true;
             surface.removeAttribute('data-caret');

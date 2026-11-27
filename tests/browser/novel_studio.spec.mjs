@@ -144,7 +144,7 @@ test('keeps save reachable while the narrow editor and review panes scroll', asy
     await page.locator('#btn-chapter-edit').click();
     await expect.poll(() => page.locator('#ce-reference').evaluate(el => el.open)).toBe(false);
     const prose = page.getByRole('textbox', {name:'本章正文', exact:true});
-    expect(await page.getByRole('textbox', {name:'章节标题', exact:true}).isVisible()).toBe(true);
+    await expect.poll(() => page.getByRole('textbox', {name:'章节标题', exact:true}).isVisible()).toBe(true);
     await prose.focus();
     expect(await prose.evaluate(el => getComputedStyle(el).boxShadow)).toBe('none');
     expect(await prose.evaluate(el => parseFloat(getComputedStyle(el).lineHeight) / parseFloat(getComputedStyle(el).fontSize))).toBeLessThanOrEqual(1.65);
