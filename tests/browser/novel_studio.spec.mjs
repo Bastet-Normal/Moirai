@@ -195,10 +195,22 @@ test('the caret stays on the last line of a long wrapped chapter', async ({ stud
                     Math.abs(caret.top + caret.height / 2 - lineCenter) <= 1;
             })).toBe(true);
         }
+        const tallHeight = await prose.evaluate(el => el.clientHeight);
         await page.setViewportSize({width, height:650});
+        await expect.poll(() => prose.evaluate(el => el.clientHeight)).toBeLessThan(tallHeight);
         await expect.poll(() => prose.evaluate(el =>
             el.scrollHeight - el.clientHeight - el.scrollTop
         )).toBeLessThanOrEqual(1);
+        // Scrolling up to reread leaves the insertion point at the end.
+        const readingTop = await prose.evaluate(el => {
+            el.scrollTop = Math.floor(el.scrollHeight / 2);
+            return el.scrollTop;
+        });
+        const shortHeight = await prose.evaluate(el => el.clientHeight);
+        await page.setViewportSize({width, height:735});
+        await expect.poll(() => prose.evaluate(el => el.clientHeight)).toBeGreaterThan(shortHeight);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))));
+        await expect.poll(() => prose.evaluate(el => el.scrollTop)).toBe(readingTop);
         await prose.fill(original);
     }
 });
