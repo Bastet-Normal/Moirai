@@ -14,6 +14,7 @@ def package_release(destination: Path) -> None:
     files = [ROOT / item for item in _ROOT_FILES]
     files.extend(ROOT / "scripts" / item for item in _LAUNCH_FILES)
     files.append(ROOT / "web" / "index.html")
+    files.append(ROOT / "core" / "han_repertoire.json")
     for directory in _DIRECTORIES:
         files.extend(
             path for path in (ROOT / directory).rglob("*")

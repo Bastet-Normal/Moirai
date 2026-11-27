@@ -70,6 +70,7 @@ def test_edit_requires_explicit_revision_and_refuses_stale_view(project, method,
     assert missing.status_code == 428, missing.text
     stale = getattr(client, method)(path, json={**body, "expected_revision": "0" * 64})
     assert stale.status_code == 409, stale.text
+    assert stale.json()["code"] == "project_conflict"
     after = {p.relative_to(manager.base_dir): p.read_bytes() for p in manager.base_dir.rglob("*") if p.is_file()}
     assert after == before
     provider.assert_not_called()
@@ -90,6 +91,32 @@ def test_all_read_views_share_revision_and_old_editor_cannot_overwrite(project):
     })
     assert second.status_code == 409
     assert StateManager("book").state.chapters[1].full_text == "另一个页面已保存的新文"
+
+
+def test_unchanged_save_reads_one_chapter_and_still_checks_the_revision(project, monkeypatch):
+    manager, client = project
+    def unexpected_load(*args, **kwargs):
+        pytest.fail("a read-only acknowledgement loaded the entire project")
+    monkeypatch.setattr(StateManager, "load_state", unexpected_load)
+    body = {"chapter": 1, "text": manager.state.chapters[1].full_text, "expected_revision": manager.revision}
+    assert client.patch("/api/novel/book/chapter_text", json=body).json()["revision"] == manager.revision
+    assert client.patch("/api/novel/book/chapter_text", json={**body, "expected_revision": "0" * 64}).status_code == 409
+
+
+def test_missing_canonical_body_is_visible_and_blocks_edits_and_incomplete_delivery(project):
+    manager, client = project
+    manager.append_manual_chapter("第二章", "保留的第二章")
+    (manager.chapters_dir / "chapter_001.json").unlink()
+    before = {p: p.read_bytes() for p in manager.base_dir.rglob("*") if p.is_file()}
+    shelf = client.get("/api/novels").json()
+    assert [item["novel_id"] for item in shelf["warnings"]] == ["book"]
+    assert client.get("/api/novel/book/search", params={"q": "没有匹配"}).json()["incomplete"]
+    assert client.get("/api/novel/book/export_docx").status_code == 409
+    changed = client.patch("/api/novel/book/chapter_text", json={
+        "chapter": 2, "text": "尝试修改", "expected_revision": manager.revision,
+    })
+    assert changed.status_code == 409
+    assert {p: p.read_bytes() for p in manager.base_dir.rglob("*") if p.is_file()} == before
 
 
 def test_human_review_api_binds_decision_to_current_text_and_revision(project):

@@ -3,7 +3,8 @@ import re
 
 from pydantic import BaseModel, Field
 
-_CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
+from core.text_limits import HAN_RUNS
+
 _LATIN_WORD = re.compile(r"[A-Za-z0-9_]+")
 
 
@@ -15,7 +16,8 @@ def lexical_tokens(text: str) -> set[str]:
     stable lexical recall while keeping this offline and deterministic.
     """
     tokens = {word.casefold() for word in _LATIN_WORD.findall(text or "")}
-    for run in _CJK_RUN.findall(text or ""):
+    for match in HAN_RUNS.finditer(text or ""):
+        run = match[0]
         if len(run) == 1:
             tokens.add(run)
             continue

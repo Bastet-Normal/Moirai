@@ -1,17 +1,46 @@
-"""Shared bounds for newly written chapter text, including replacement growth."""
+"""Shared manuscript validation, Han-character counts and paragraph edits."""
+
+import json
+import re
+from pathlib import Path
 
 from core.error_reporting import SafeUserMessage
 
 MAX_CHAPTER_TEXT_CHARS = 2_000_000
 
 
-class ChapterTextLimitError(SafeUserMessage, ValueError):
+# Pin the editor and persisted counts to one Han repertoire across OS Unicode versions.
+def _han_runs() -> re.Pattern[str]:
+    repertoire = json.loads(Path(__file__).with_name("han_repertoire.json").read_text("utf-8"))
+    ranges = ["-".join(chr(int(point, 16)) for point in item.split("-")) for item in repertoire["ranges"]]
+    return re.compile("[" + "".join(ranges) + "]+")
+
+
+HAN_RUNS = _han_runs()
+
+
+def count_han_characters(text: str) -> int:
+    return sum(match.end() - match.start() for match in HAN_RUNS.finditer(text))
+
+
+class ChapterTextError(SafeUserMessage, ValueError):
+    """An author edit would leave an invalid chapter body."""
+
+
+class ChapterTextLimitError(ChapterTextError):
     pass
 
 
 def check_chapter_length(length: int) -> None:
     if length > MAX_CHAPTER_TEXT_CHARS:
         raise ChapterTextLimitError(f"修改后的正文超过 {MAX_CHAPTER_TEXT_CHARS} 字符上限")
+
+
+def require_chapter_prose(text: str) -> str:
+    check_chapter_length(len(text))
+    if not text.strip():
+        raise ChapterTextError("章节正文不能为空")
+    return text
 
 
 def check_replacement_length(text: str, old: str, new: str, *, count: int | None = None) -> None:

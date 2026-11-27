@@ -288,6 +288,8 @@ class ChapterContent(BaseModel):
     beats_raw_text: list[str] = Field(default_factory=list, description="各节拍扩写原始文本")
     full_text: str = Field(..., description="经过润色合并后的最终正文")
     prose_sha256: str = ""
+    chapter_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    manual_append_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     finding_decisions: dict[str, FindingDecision] = Field(default_factory=dict, max_length=200)
     cliffhanger_ending: str = Field("", description="章末留钩子片段")
     audit_history: list[AuditReport] = Field(default_factory=list, description="本章质检记录")
@@ -295,25 +297,20 @@ class ChapterContent(BaseModel):
     human_review_history: list[HumanChapterReview] = Field(default_factory=list, description="作者人工审阅记录")
     current_human_review: HumanChapterReview | None = Field(default=None, description="与当前正文逐字匹配的最近人工审阅")
 
-    def refresh_final_audit(self) -> None:
-        digest = hashlib.sha256(self.full_text.encode("utf-8")).hexdigest()
+    def refresh_prose_reviews(self) -> None:
+        self.prose_sha256 = hashlib.sha256(self.full_text.encode("utf-8")).hexdigest()
         self.final_audit = next(
-            (r.model_copy(deep=True) for r in reversed(self.audit_history) if r.text_sha256 == digest), None,
+            (r.model_copy(deep=True) for r in reversed(self.audit_history) if r.text_sha256 == self.prose_sha256), None,
         )
-
-    def refresh_human_review(self) -> None:
-        digest = hashlib.sha256(self.full_text.encode("utf-8")).hexdigest()
         self.current_human_review = next(
-            (r.model_copy(deep=True) for r in reversed(self.human_review_history) if r.text_sha256 == digest), None,
+            (r.model_copy(deep=True) for r in reversed(self.human_review_history) if r.text_sha256 == self.prose_sha256), None,
         )
 
     @model_validator(mode="after")
     def verify_audit_identity(self, info: ValidationInfo) -> "ChapterContent":
         # Only the internal read-only metadata view lacks a body to verify.
         if not (info.context and info.context.get("metadata_only")):
-            self.prose_sha256 = hashlib.sha256(self.full_text.encode("utf-8")).hexdigest()
-            self.refresh_final_audit()
-            self.refresh_human_review()
+            self.refresh_prose_reviews()
         return self
 
     @computed_field

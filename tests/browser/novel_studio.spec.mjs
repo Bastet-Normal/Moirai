@@ -1,23 +1,12 @@
-import { expect, test as runner } from '@playwright/test';
-import { launchSafari, watchDownload } from './native-safari.mjs';
-
-const test = runner.extend({
-    safariPage: async ({}, use, testInfo) => {
-        const browser = await launchSafari();
-        try {
-            const page = await browser.newPage({viewport:{width:1280,height:800}});
-            await use(page);
-            expect(await page.evaluate(() => window.safariIssues)).toEqual([]);
-        } finally { await browser.close(); }
-    }
-});
+import { expect } from '@playwright/test';
+import { test } from './studio-fixture.mjs';
 
 // The remote macOS runner may spend several seconds rasterising the first canvas.
 const graphExpect = expect.configure({timeout:20_000});
 
 async function openDemoNovel(page) {
     const response = await page.goto('/');
-    expect(response?.ok).toBeTruthy();
+    expect(response?.ok()).toBeTruthy();
     const shelfToggle = page.getByRole('button', { name: '书架', exact: true });
     if (await shelfToggle.isVisible()) await shelfToggle.click();
     const book = page.getByRole('button', { name: '打开作品：雾港来信', exact: true });
@@ -29,25 +18,25 @@ async function openDemoNovel(page) {
 async function waitForNewCompletedTask(page, previousTaskId, novelId, expectedStep) {
     await expect.poll(async () => {
         const response = await page.request.get('/api/status');
-        if (!response.ok) return '';
+        if (!response.ok()) return '';
         const status = await response.json();
         if (status.task_id === previousTaskId || status.is_running || status.error) return '';
         return `${status.current_novel}|${status.current_step}|${status.progress}`;
     }, { timeout: 30_000 }).toBe(`${novelId}|${expectedStep}|100`);
     await expect.poll(async () => {
         const response = await page.request.get(`/api/novel/${novelId}`);
-        if (!response.ok) return false;
+        if (!response.ok()) return false;
         const project = await response.json();
         const browserRevision = await page.evaluate(() => novelData?.revision || '');
         return browserRevision === project.revision;
     }, { timeout: 10_000 }).toBe(true);
 }
 
-test('loads the offline library with security headers and named workspace landmarks', async ({ safariPage: page }) => {
+test('loads the offline library with security headers and named workspace landmarks', async ({ studioPage: page }) => {
     const response = await page.goto('/');
-    expect(response?.headers.get('cache-control')).toContain('no-store');
-    expect(response?.headers.get('content-security-policy')).toContain("default-src 'self'");
-    expect(response?.headers.get('x-frame-options')).toBe('DENY');
+    expect(response?.headers()['cache-control']).toContain('no-store');
+    expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
+    expect(response?.headers()['x-frame-options']).toBe('DENY');
     await expect.poll(() => page.title()).toBe('Moirai');
     await expect.poll(() => page.locator('.topbar-brand-text').innerText()).toBe('Moirai');
 
@@ -67,11 +56,11 @@ test('loads the offline library with security headers and named workspace landma
     await expect.poll(() => page.getByRole('article', { name: '第 1 章 退信', exact: true }).isVisible()).toBe(true);
 });
 
-test('opens all compliance findings and locates the selected paragraph', async ({ safariPage: page }) => {
+test('opens all compliance findings and locates the selected paragraph', async ({ studioPage: page }) => {
     const saved = await page.request.post('/api/compliance/custom_words', {
         data: { words: { 浏览器门禁: ['蓝色邮戳', '空竹篮'] } },
     });
-    expect(saved.ok).toBeTruthy();
+    expect(saved.ok()).toBeTruthy();
     await openDemoNovel(page);
 
     const summary = page.getByRole('button', { name: '查看 2 处合规风险', exact: true });
@@ -95,10 +84,10 @@ test('opens all compliance findings and locates the selected paragraph', async (
     await page.keyboard.press('Escape');
     await expect.poll(() => panel.isVisible()).toBe(false);
     await expect.poll(() => summary.getAttribute('aria-expanded')).toBe('false');
-    await expect.poll(() => summary.focused()).toBe(true);
+    await expect.poll(() => summary.evaluate(el => el === document.activeElement)).toBe(true);
 });
 
-test('a folded desktop bookshelf frees the reading area and keeps the mobile drawer available', async ({safariPage: page}) => {
+test('a folded desktop bookshelf frees the reading area and keeps the mobile drawer available', async ({studioPage: page}) => {
     await openDemoNovel(page);
     const close = page.getByRole('button', {name: '收起作品库', exact: true});
     const open = page.getByRole('button', {name: '展开作品库', exact: true});
@@ -106,11 +95,11 @@ test('a folded desktop bookshelf frees the reading area and keeps the mobile dra
     const expandedLeft = await contentLeft();
     await close.click();
     await expect.poll(contentLeft).toBe(0);
-    await expect.poll(() => open.focused()).toBe(true);
+    await expect.poll(() => open.evaluate(el => el === document.activeElement)).toBe(true);
     await expect.poll(() => page.locator('#current-chapter-title').innerText()).toBe('第 1 章 退信');
     await open.click();
     await expect.poll(contentLeft).toBe(expandedLeft);
-    await expect.poll(() => close.focused()).toBe(true);
+    await expect.poll(() => close.evaluate(el => el === document.activeElement)).toBe(true);
     await close.click();
     await page.goto('/');
     await expect.poll(contentLeft).toBe(0);
@@ -123,7 +112,7 @@ test('a folded desktop bookshelf frees the reading area and keeps the mobile dra
     await expect.poll(contentLeft).toBe(expandedLeft);
 });
 
-test('keeps the workspace inside four supported viewport widths', async ({ safariPage: page }) => {
+test('keeps the workspace inside four supported viewport widths', async ({ studioPage: page }) => {
     for (const width of [320, 390, 768, 1024]) {
         await page.setViewportSize({ width, height: 844 });
         await openDemoNovel(page);
@@ -141,7 +130,7 @@ test('keeps the workspace inside four supported viewport widths', async ({ safar
     }
 });
 
-test('keeps save reachable while the narrow editor and review panes scroll', async ({safariPage:page}) => {
+test('keeps save reachable while the narrow editor and review panes scroll', async ({ studioPage: page }) => {
     await page.setViewportSize({width:320, height:844});
     await openDemoNovel(page);
     await page.locator('#btn-chapter-edit').click();
@@ -182,7 +171,7 @@ test('keeps save reachable while the narrow editor and review panes scroll', asy
     }
 });
 
-test('the caret stays on the last line of a long wrapped chapter', async ({safariPage:page}) => {
+test('the caret stays on the last line of a long wrapped chapter', async ({ studioPage: page }) => {
     const paragraph = '天文台的灯还亮着。'.repeat(10);
     const manuscript = Array(500).fill(paragraph).join('\n\n');
     for (const width of [1290, 390]) {
@@ -214,7 +203,7 @@ test('the caret stays on the last line of a long wrapped chapter', async ({safar
     }
 });
 
-test('blank workspace clicks leave the outline off and a single graph node stays readable', async ({safariPage:page}) => {
+test('blank workspace clicks leave the outline off and a single graph node stays readable', async ({ studioPage: page }) => {
     test.setTimeout(120_000);
     await openDemoNovel(page);
     await page.getByRole('tab', {name:'世界观', exact:true}).click();
@@ -273,7 +262,7 @@ test('blank workspace clicks leave the outline off and a single graph node stays
     })).toEqual([]);
 });
 
-test('keyboard tab navigation changes tools without changing chapters', async ({ safariPage: page }) => {
+test('keyboard tab navigation changes tools without changing chapters', async ({ studioPage: page }) => {
     await page.setViewportSize({ width: 768, height: 844 });
     await openDemoNovel(page);
     const readerTab = page.getByRole('tab', { name: '章节', exact: true });
@@ -284,14 +273,14 @@ test('keyboard tab navigation changes tools without changing chapters', async ({
     await expect.poll(() => page.locator('#current-chapter-title').innerText()).toBe('第 1 章 退信');
 });
 
-test('reviews cross-chapter evidence without leaving the current chapter or dropping notes', async ({ safariPage: page }) => {
+test('reviews cross-chapter evidence without leaving the current chapter or dropping notes', async ({ studioPage: page }) => {
     await page.setViewportSize({width:390, height:780});
     await page.goto('/');
     const shelf = page.getByRole('button', { name:'书架', exact:true });
     if (await shelf.isVisible()) await shelf.click();
     await page.getByRole('button', { name:'打开作品：群星航路', exact:true }).click();
     await page.locator('#chapters-nav-list').getByRole('button', { name:/第2章 码头夜潮/ }).click();
-    await expect.poll(() => page.locator('#btn-audit-history').enabled()).toBe(true);
+    await expect.poll(() => page.locator('#btn-audit-history').isEnabled()).toBe(true);
     const previous = (await (await page.request.get('/api/status')).json()).task_id;
     await page.locator('#btn-audit-history').click();
     await page.getByRole('button', { name:'自动审稿', exact:true }).click();
@@ -302,12 +291,30 @@ test('reviews cross-chapter evidence without leaving the current chapter or drop
     await page.getByRole('button', { name:'查看引用', exact:true }).click();
     await expect.poll(() => page.locator('#audit-source-text mark').textContent()).toContain('玻璃匣');
     await page.getByRole('button', {name:'返回问题', exact:true}).click();
-    await expect.poll(() => page.getByRole('button', {name:'查看引用', exact:true}).focused()).toBe(true);
+    await expect.poll(() => page.getByRole('button', {name:'查看引用', exact:true}).evaluate(el => el === document.activeElement)).toBe(true);
     expect(await page.locator('#current-chapter-title').textContent()).toContain('第 2 章');
     expect(await page.locator('#human-review-note').evaluate(field => field.value)).toBe('本次意见只属于第二章。');
 });
 
-test('searches lazy chapter prose and jumps without changing the project revision', async ({ safariPage: page }) => {
+test('reopening a book in the same tab restores an unsubmitted review and flags a draft before export', async ({ studioPage: page }) => {
+    await openDemoNovel(page);
+    await page.locator('#btn-audit-history').click();
+    await page.locator('#review-changes').click();
+    await page.locator('#human-review-note').fill('核对信封上的日期');
+    await openDemoNovel(page);
+    await page.locator('#btn-audit-history').click();
+    expect(await page.locator('#human-review-note').evaluate(el => el.value)).toBe('核对信封上的日期');
+    expect(await page.locator('#review-changes').evaluate(el => el.checked)).toBe(true);
+    await page.keyboard.press('Escape');
+    await page.locator('#btn-new-chapter').click();
+    await page.locator('#ce-text').fill('未交稿的内容。');
+    await page.keyboard.press('Escape');
+    await page.locator('#btn-publication-preview').click();
+    await expect.poll(() => page.locator('#publication-note').textContent()).toContain('本机留有编辑草稿（新章）');
+    expect(await page.locator('#publication-text').textContent()).not.toContain('未交稿的内容。');
+});
+
+test('searches lazy chapter prose and jumps without changing the project revision', async ({ studioPage: page }) => {
     await openDemoNovel(page);
     const directory = page.getByRole('navigation', { name: '章节目录', exact: true });
     await directory.getByRole('button', { name: /第2章 潮汐表背面/ }).click();
@@ -321,7 +328,7 @@ test('searches lazy chapter prose and jumps without changing the project revisio
             if (event.key !== 'Control') window.safariShortcut = [event.key.toLowerCase(), event.ctrlKey];
         }, true);
     });
-    await page.keyboard.press('Control+K');
+    await page.keyboard.press('Control+k');
     await expect.poll(() => page.evaluate(() => window.safariShortcut)).toEqual(['k', true]);
     const search = page.getByRole('combobox', { name: '搜索作品、章节或操作', exact: true });
     await expect.poll(() => search.isVisible()).toBe(true);
@@ -337,7 +344,7 @@ test('searches lazy chapter prose and jumps without changing the project revisio
     expect(after.revision).toBe(before.revision);
 });
 
-test('exports a locked prose snapshot without changing the workspace revision', async ({ safariPage: page }) => {
+test('exports a locked prose snapshot without changing the workspace revision', async ({ studioPage: page, watchDownload }) => {
     await openDemoNovel(page);
     const before = await (await page.request.get('/api/novel/demo_alpha')).json();
     const collectDownload = await watchDownload(page, '.txt');
@@ -351,7 +358,7 @@ test('exports a locked prose snapshot without changing the workspace revision', 
     await expect.poll(() => page.getByRole('heading', { level: 1, name: '《雾港来信》', exact: true }).isVisible()).toBe(true);
 });
 
-test('saves chapter text through the revision-bound editor and keeps the chapter selected', async ({ safariPage: page }) => {
+test('saves chapter text through the revision-bound editor and keeps the chapter selected', async ({ studioPage: page }) => {
     await openDemoNovel(page);
     const chapterTwo = page.getByRole('navigation', { name: '章节目录', exact: true })
         .getByRole('button', { name: /第2章 潮汐表背面/ });
@@ -373,7 +380,7 @@ test('saves chapter text through the revision-bound editor and keeps the chapter
     await expect.poll(() => chapterTwo.getAttribute('aria-current')).toBe('page');
 });
 
-test('round-trips a real backup through deletion, import, rollback and trash restore', async ({ safariPage: page }) => {
+test('round-trips a real backup through deletion, import, rollback and trash restore', async ({ studioPage: page, watchDownload }) => {
     await openDemoNovel(page);
     const originalBody = await page.locator('#current-chapter-body').innerText();
 
@@ -412,7 +419,7 @@ test('round-trips a real backup through deletion, import, rollback and trash res
     const rollback = page.locator('#modal-rollback');
     await expect.poll(() => rollback.getAttribute('class')).toMatch(/open/);
     const target = page.locator('#rollback-target');
-    await expect.poll(() => target.enabled()).toBe(true);
+    await expect.poll(() => target.isEnabled()).toBe(true);
     await target.selectOption('1');
     await rollback.getByRole('button', { name: '确认回滚', exact: true }).click();
     await expect.poll(() => rollback.isVisible()).toBe(false);
@@ -456,10 +463,10 @@ test('round-trips a real backup through deletion, import, rollback and trash res
     await expect.poll(() => page.getByRole('button', { name: '打开作品：群星航路', exact: true }).count()).toBe(1);
 });
 
-test('creates, continues, rewrites and delivers a planned novel through real background jobs', async ({ safariPage: page }, testInfo) => {
+test('creates, continues, rewrites and delivers a planned novel through real background jobs', async ({ studioPage: page }, testInfo) => {
     test.setTimeout(45_000);
     const response = await page.goto('/');
-    expect(response?.ok).toBeTruthy();
+    expect(response?.ok()).toBeTruthy();
     const projectId = `browser_created_${testInfo.project.name}_${testInfo.retry}`;
 
     await page.getByRole('button', { name: '新建作品', exact: true }).first().click();
@@ -502,7 +509,7 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     await expect.poll(() => page.locator('#current-chapter-body').innerText()).toContain('罗盘却指向港墙之外');
 
     const projectResponse = await page.request.get(`/api/novel/${projectId}`);
-    expect(projectResponse.ok).toBeTruthy();
+    expect(projectResponse.ok()).toBeTruthy();
     const project = await projectResponse.json();
     expect(project.summary.current_chapter).toBe(1);
     expect(project.summary.planning_pending).toBeFalsy();
@@ -609,7 +616,7 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     await expect.poll(() => page.getByRole('button', { name: /^打开作品：/ }).count()).toBe(2);
 });
 
-test('reference tools locate people, follow planted clues and open unwritten outlines', async ({safariPage: page}) => {
+test('reference tools locate people, follow planted clues and open unwritten outlines', async ({studioPage: page}) => {
     test.setTimeout(90_000);
     await page.goto('/');
     const shelf = page.getByRole('button', {name:'书架', exact:true});
@@ -644,18 +651,18 @@ test('reference tools locate people, follow planted clues and open unwritten out
     await expect.poll(() => page.locator('#ol-title').evaluate(field => field.value)).toBe('雾中信标');
 });
 
-test('the narrow reader resumes the selected chapter and exposes paragraph actions on demand', async ({safariPage: page}) => {
+test('the narrow reader resumes the selected chapter and exposes paragraph actions on demand', async ({studioPage: page}) => {
     await page.setViewportSize({width:390, height:780});
     await openDemoNovel(page);
     await page.locator('#chapters-nav-list').getByRole('button', {name:/第2章 潮汐表背面/}).click();
     const edit = page.getByRole('button', {name:'编辑第 2 章第 1 段', exact:true});
-    await expect.poll(() => page.locator('#btn-audit-history').enabled()).toBe(true);
+    await expect.poll(() => page.locator('#btn-audit-history').isEnabled()).toBe(true);
     expect(await edit.count()).toBe(0);
     await page.locator('#chapter-tools summary').click();
     const smaller = page.getByRole('button', {name:'减小字号', exact:true});
     await smaller.click();
     await page.keyboard.press('Escape');
-    await expect.poll(() => page.locator('#chapter-tools summary').focused()).toBe(true);
+    await expect.poll(() => page.locator('#chapter-tools summary').evaluate(el => el === document.activeElement)).toBe(true);
     await expect.poll(() => smaller.isVisible()).toBe(false);
     await page.locator('#chapter-tools summary').click();
     await page.getByRole('button', {name:'逐段修改', exact:true}).click();
@@ -666,4 +673,51 @@ test('the narrow reader resumes the selected chapter and exposes paragraph actio
     await page.getByRole('button', {name:'返回创作台', exact:true}).click();
     await page.getByRole('button', {name:'继续读第 2 章', exact:true}).click();
     await expect.poll(() => page.locator('#current-chapter-title').textContent()).toBe('第 2 章 潮汐表背面');
+});
+
+test('a lost append acknowledgement survives reload and later edits target the committed chapter', async ({ studioPage: page }) => {
+    const id = 'receipt_' + Date.now();
+    const imported = await page.request.post('/api/novels/import_manuscript', {data:{
+        name:id, title:id, chapters:[{title:'开篇', text:'初稿。'}],
+    }});
+    expect(imported.ok()).toBe(true);
+    async function openNewChapter() {
+        await page.goto('/');
+        const book = page.getByRole('button', {name:'打开作品：' + id, exact:true});
+        await expect.poll(() => book.isVisible()).toBe(true);
+        await book.click();
+        await expect.poll(() => page.locator('#btn-new-chapter').isVisible()).toBe(true);
+        await page.locator('#btn-new-chapter').click();
+    }
+    await openNewChapter();
+    await page.locator('#ce-title').fill('回信');
+    await page.locator('#ce-text').fill('〇𠮷㐀海！ A1🚢');
+    expect(await page.locator('#ce-count').textContent()).toBe('4 个汉字');
+    await page.evaluate(() => {
+        const original = window.fetch;
+        window.fetch = async (...args) => {
+            const response = await original(...args);
+            if (args[1]?.method === 'POST' && String(args[0]).endsWith('/chapters') && response.ok) {
+                window.fetch = original;
+                throw new Error('测试模拟保存回执中断');
+            }
+            return response;
+        };
+    });
+    await page.locator('#ce-save').click();
+    await expect.poll(() => page.getByText('测试模拟保存回执中断', {exact:true}).isVisible()).toBe(true);
+    await openNewChapter();
+    expect(await page.locator('#ce-text').evaluate(el => el.value)).toBe('〇𠮷㐀海！ A1🚢');
+    await page.locator('#ce-text').fill('改过的回信。');
+    await page.locator('#ce-save').click();
+    await expect.poll(() => page.locator('#ce-reload').isVisible()).toBe(true);
+    await page.locator('#ce-reload').click();
+    await expect.poll(() => page.locator('#ce-conflict-current').textContent()).toContain('〇𠮷㐀海');
+    await page.getByRole('button', {name:'已核对，使用编辑区稿件', exact:true}).click();
+    await page.locator('#ce-save').click();
+    await expect.poll(() => page.locator('#modal-chapter').isVisible()).toBe(false);
+    const project = await (await page.request.get('/api/novel/' + id)).json();
+    expect(project.chapters.length).toBe(2);
+    const result = await (await page.request.get('/api/novel/' + id + '/chapter/2')).json();
+    expect(result.chapter.full_text).toBe('改过的回信。');
 });

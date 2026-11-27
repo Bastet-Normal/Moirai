@@ -46,5 +46,5 @@ export default defineConfig({
             OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
         },
     },
-    projects: [{name:'safari'}],
+    projects: [{name:'webkit', use:{browserName:'webkit', headless:true}}],
 });

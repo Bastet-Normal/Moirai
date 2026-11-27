@@ -51,6 +51,32 @@ def _open_archive(source: ArchiveSource) -> zipfile.ZipFile:
     return zipfile.ZipFile(source)
 
 
+def _exceeds_compression_limit(info: zipfile.ZipInfo) -> bool:
+    return info.file_size > MAX_COMPRESSION_RATIO * info.compress_size
+
+
+def write_project_archive(project_dir: Path, destination: Path) -> None:
+    """Write a locked project snapshot using compression accepted by our importer."""
+    project_dir = project_dir.resolve()
+
+    def write_members(stored: set[str]) -> set[str]:
+        with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED, compresslevel=1, strict_timestamps=False) as archive:
+            for path in sorted(project_dir.rglob("*")):
+                if path.is_symlink() or not path.resolve().is_relative_to(project_dir):
+                    raise InvalidProjectArchive("项目包含链接到其他位置的文件，拒绝打包")
+                if path.is_file():
+                    name = path.relative_to(project_dir.parent).as_posix()
+                    method = zipfile.ZIP_STORED if name in stored else zipfile.ZIP_DEFLATED
+                    archive.write(path, name, compress_type=method)
+            return {info.filename for info in archive.infolist() if _exceeds_compression_limit(info)}
+
+    # The usual case only visits the files once. For an unusually repetitive
+    # member, store its exact bytes and keep compressing the rest of the book.
+    too_dense = write_members(set())
+    if too_dense and write_members(too_dense):
+        raise InvalidProjectArchive("打包期间作品文件已更改，请重新备份")
+
+
 def inspect_archive(source: ArchiveSource) -> tuple[zipfile.ZipFile, str, NovelProjectState]:
     try:
         archive = _open_archive(source)
@@ -97,7 +123,7 @@ def _inspect_open_archive(archive: zipfile.ZipFile) -> tuple[zipfile.ZipFile, st
         if total_size > MAX_UNCOMPRESSED_BYTES:
             archive.close()
             raise InvalidProjectArchive("备份解压后体积过大（上限 1GB）")
-        if info.compress_size and info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+        if info.compress_size and _exceeds_compression_limit(info):
             archive.close()
             raise InvalidProjectArchive("备份压缩比异常，疑似压缩炸弹")
         if info.file_size and not info.compress_size:

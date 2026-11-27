@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
-from core.schemas import NovelProjectState
+from core.chapter_store import iter_saved_chapters
+from core.error_reporting import report_internal_error
+from core.schemas import ChapterContent, NovelProjectState
+from core.storage import ProjectReadOnlyError, project_lock, project_version, read_json, revision_token
+
+logger = logging.getLogger("novelengine.search")
 
 _WHITESPACE = re.compile(r"\s+")
 _KIND_ORDER = {
@@ -36,10 +43,6 @@ def _searchable_text(value: Any) -> str:
     return _WHITESPACE.sub(" ", " ".join(_text_values(value))).strip()
 
 
-def _match(text: str, query: str) -> re.Match[str] | None:
-    return re.search(re.escape(query), text, flags=re.IGNORECASE)
-
-
 def _snippet(text: str, match: re.Match[str], *, radius: int = 64) -> str:
     start = max(0, match.start() - radius)
     end = min(len(text), match.end() + radius)
@@ -48,12 +51,15 @@ def _snippet(text: str, match: re.Match[str], *, radius: int = 64) -> str:
     return f"{prefix}{text[start:end].strip()}{suffix}"
 
 
-def search_project(state: NovelProjectState, query: str, *, limit: int = 40) -> list[dict[str, Any]]:
+def search_project(
+    state: NovelProjectState, query: str, *, limit: int = 40, ordered_chapters: Iterable[ChapterContent] | None = None,
+) -> list[dict[str, Any]]:
     """Search prose and structured story data, returning at most one hit per entity."""
     normalized_query = _WHITESPACE.sub(" ", query).strip()
     if not normalized_query or limit < 1:
         return []
 
+    pattern = re.compile(re.escape(normalized_query), re.IGNORECASE)
     candidates: list[dict[str, Any]] = []
 
     def add(
@@ -64,15 +70,12 @@ def search_project(state: NovelProjectState, query: str, *, limit: int = 40) -> 
         value: Any,
         tab: str,
         chapter_number: int | None = None,
-        search_label: bool = True,
     ) -> None:
-        text = _searchable_text(value)
-        found = _match(text, normalized_query)
-        label_match = _match(label, normalized_query) if search_label else None
-        if not found and not label_match:
+        label_match = pattern.search(label)
+        source = label if label_match else _searchable_text(value)
+        selected = label_match or pattern.search(source)
+        if selected is None:
             return
-        source, selected = (label, label_match) if label_match else (text, found)
-        assert selected is not None
         candidates.append(
             {
                 "kind": kind,
@@ -83,19 +86,6 @@ def search_project(state: NovelProjectState, query: str, *, limit: int = 40) -> 
                 "chapter_number": chapter_number,
                 "_label_match": label_match is not None,
             }
-        )
-
-    for number, chapter in sorted(state.chapters.items()):
-        # Chapter titles are already available instantly in the command palette;
-        # this project search contributes the lazily loaded body text.
-        add(
-            kind="chapter",
-            key=f"chapter:{number}",
-            label=f"第{number}章 {chapter.title}",
-            value=chapter.full_text,
-            tab="chapters",
-            chapter_number=number,
-            search_label=False,
         )
 
     for character in sorted(state.characters.values(), key=lambda item: (item.name, item.id)):
@@ -176,6 +166,56 @@ def search_project(state: NovelProjectState, query: str, *, limit: int = 40) -> 
             item["label"],
         )
     )
-    for item in candidates:
-        item.pop("_label_match")
-    return candidates[:limit]
+    # In the established ordering, prose follows all label hits and precedes the
+    # remaining structured matches. Stop opening shards as soon as that space is filled.
+    labels = []
+    other = []
+    for item in candidates[:limit]:
+        (labels if item.pop("_label_match") else other).append(item)
+    if len(labels) == limit:
+        return labels
+    results = labels
+    if ordered_chapters is None:
+        ordered_chapters = (state.chapters[n] for n in sorted(state.chapters))
+    single_term = " " not in normalized_query
+    for chapter in ordered_chapters:
+        # Whitespace normalization cannot create a single-term match. Avoid copying
+        # the entire manuscript when searching for an uncommon name or identifier.
+        if single_term and not pattern.search(chapter.full_text):
+            continue
+        text = _WHITESPACE.sub(" ", chapter.full_text).strip()
+        match = pattern.search(text)
+        if match:
+            number = chapter.chapter_number
+            results.append({
+                "kind": "chapter", "key": f"chapter:{number}", "label": f"第{number}章 {chapter.title}",
+                "snippet": _snippet(text, match), "tab": "chapters", "chapter_number": number,
+            })
+            if len(results) == limit:
+                break
+    return results + other[:limit - len(results)]
+
+
+def search_saved_project(project_dir: Path, query: str, *, limit: int) -> dict[str, Any]:
+    """Bind ranked results and revision to the same committed manuscript."""
+    root = project_dir.parent.resolve()
+    project_dir = project_dir.resolve()
+    if project_dir.parent != root:
+        raise ProjectReadOnlyError("作品目录不在当前作品库内")
+    incomplete = False
+
+    def skipped(path: Path, exc: Exception) -> None:
+        nonlocal incomplete
+        incomplete = True
+        report_internal_error(logger, exc, scope="project_search",
+                              context={"novel_id": project_dir.name, "file": path.name})
+
+    with project_lock(project_dir, scope="snapshot"):
+        try:
+            state = NovelProjectState.model_validate(read_json(project_dir / "project_state.json"))
+        except (ValueError, OSError, RecursionError) as exc:
+            raise ProjectReadOnlyError("作品目录暂时无法读取，请刷新作品库后再搜索") from exc
+        chapters = iter_saved_chapters(project_dir / "chapters", state.chapters, skipped)
+        results = search_project(state, query, limit=limit, ordered_chapters=chapters)
+        return {"novel_id": project_dir.name, "revision": revision_token(project_dir.name, project_version(project_dir)),
+                "query": query, "results": results, "incomplete": incomplete}

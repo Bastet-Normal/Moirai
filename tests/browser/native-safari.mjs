@@ -10,6 +10,16 @@ import { setTimeout as delay } from 'node:timers/promises'
 const require = createRequire(import.meta.url)
 const library = await readFile(require.resolve('@testing-library/dom/dist/@testing-library/dom.umd.min.js'), 'utf8')
 
+// Match the Playwright response interface used by the shared studio scenarios.
+async function request(url, options) {
+  const response = await fetch(url, options)
+  return {
+    ok: () => response.ok,
+    headers: () => Object.fromEntries(response.headers),
+    json: () => response.json()
+  }
+}
+
 export async function launchSafari() {
   const service = new safari.ServiceBuilder('/usr/bin/safaridriver').build()
   const scratch = await mkdtemp(join(tmpdir(),'moirai-safari-'))
@@ -46,8 +56,7 @@ export async function launchSafari() {
         ...queries(steps),
         nth: value => selector([...steps,{type:'nth',value}]),
         filter: ({hasText}) => selector([...steps,{type:'filter',value:hasText}]),
-        enabled: async () => (await first()).isEnabled(),
-        focused: async () => driver.executeScript('return arguments[0] === document.activeElement',await first()),
+        isEnabled: async () => (await first()).isEnabled(),
         focus: async () => driver.executeScript('arguments[0].focus()',await first()),
         press: async key => driver.actions().sendKeys(Key[key === 'ArrowRight' ? 'ARROW_RIGHT' : key.toUpperCase()]).perform(),
         innerText: async () => (await first()).getProperty('innerText'),
@@ -120,7 +129,7 @@ export async function launchSafari() {
         }
         await driver.executeScript(library)
         await driver.wait(() => driver.executeScript("return document.fonts.status === 'loaded'"), 10000)
-        return fetch(target)
+        return request(target)
       },
       async setViewportSize({width,height}) {
         layoutWidth = width
@@ -128,12 +137,12 @@ export async function launchSafari() {
       },
       title: () => driver.getTitle(),
       request: {
-        get: path => fetch(new URL(path,process.env.SAFARI_BASE_URL)),
-        post: (path,{data}) => fetch(new URL(path,process.env.SAFARI_BASE_URL),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+        get: path => request(new URL(path,process.env.SAFARI_BASE_URL)),
+        post: (path,{data}) => request(new URL(path,process.env.SAFARI_BASE_URL),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
       },
       screenshot: async ({path}) => writeFile(path, Buffer.from(await driver.takeScreenshot(),'base64')),
       waitForTimeout: delay,
-      keyboard: { press: async key => key === 'Control+K' ? driver.actions().keyDown(Key.CONTROL).keyDown('k').keyUp('k').keyUp(Key.CONTROL).perform() : driver.actions().sendKeys(key==='Escape'?Key.ESCAPE:key).perform() },
+      keyboard: { press: async key => key === 'Control+k' ? driver.actions().keyDown(Key.CONTROL).keyDown('k').keyUp('k').keyUp(Key.CONTROL).perform() : driver.actions().sendKeys(key==='Escape'?Key.ESCAPE:key).perform() },
       mouse: {click: (x,y) => driver.actions().move({x:Math.round(x),y:Math.round(y)}).click().perform()}
     }
   }

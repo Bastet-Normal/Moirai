@@ -1,6 +1,7 @@
 """Regressions for manuscript migration, reviewed revisions and measured model work."""
 
 import io
+import json
 import zipfile
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -397,3 +398,142 @@ def test_worker_usage_keeps_provider_and_estimates_distinct(studio, monkeypatch)
         "model": "review-model", "reported_prompt": 23, "reported_completion": 11,
         "estimated_prompt": 6, "estimated_completion": 2, "reported_calls": 1, "estimated_calls": 1,
     }]
+
+
+def test_noop_chapter_and_paragraph_saves_keep_other_editors_current(studio):
+    manager = import_book(studio)
+    revision = manager.revision
+    chapter_file = manager.chapters_dir / "chapter_001.json"
+    timestamp = chapter_file.stat().st_mtime_ns
+    same = studio.patch("/api/novel/book/chapter_text", json={
+        "chapter": 1, "text": PRIOR, "expected_revision": revision,
+    })
+    assert same.status_code == 200
+    unchanged = studio.post("/api/novel/patch_paragraph", json={
+        "name": "book", "chapter": 1, "paragraph_index": 0, "old_text": PRIOR, "new_text": PRIOR,
+        "expected_revision": revision,
+    })
+    assert unchanged.status_code == 200, unchanged.text
+    assert StateManager("book").revision == revision
+    assert chapter_file.stat().st_mtime_ns == timestamp
+
+
+def test_paragraph_edit_on_imported_prose_preserves_history_without_a_timeline(studio):
+    manager = import_book(studio)
+    edited = studio.post("/api/novel/patch_paragraph", json={
+        "name": "book", "chapter": 1, "paragraph_index": 0, "old_text": PRIOR, "new_text": LATER,
+        "expected_revision": manager.revision,
+    })
+    assert edited.status_code == 200
+    book = StateManager("book")
+    assert book.state.chapters[1].full_text == LATER
+    assert book.get_state_reconciliation_status()["chapters"] == []
+    versions = studio.get("/api/novel/book/chapter/1/versions").json()["versions"]
+    assert len(versions) == 1
+    assert studio.get(f"/api/novel/book/chapter/1/versions/{versions[0]['number']}").json()["version"]["text"] == PRIOR
+
+
+def test_refused_append_leaves_editor_revision_valid(studio, monkeypatch):
+    manager = import_book(studio)
+    monkeypatch.setattr("core.state_manager._MAX_TIMELINE_CHAPTERS", 3)
+    for _ in range(2):
+        response = studio.post("/api/novel/book/chapters", json={
+            "expected_revision": manager.revision, "title": "新章", "text": "正文",
+        })
+        assert response.status_code == 409
+        assert "章节数量上限" in response.json()["detail"]
+    assert StateManager("book").revision == manager.revision
+
+
+def test_deleting_a_paragraph_or_replacing_a_word_cannot_empty_the_saved_chapter(studio):
+    manager = import_book(studio)
+    for url, body in (
+        ("/api/novel/patch_paragraph", {"name": "book", "old_text": PRIOR, "new_text": "", "paragraph_index": 0}),
+        ("/api/novel/book/compliance_replace", {"word": PRIOR, "replacement": " "}),
+    ):
+        response = studio.post(url, json={**body, "chapter": 1, "expected_revision": manager.revision})
+        assert response.status_code == 422
+        assert "正文" in response.json()["detail"]
+        assert StateManager("book").revision == manager.revision
+        assert StateManager("book").state.chapters[1].full_text == PRIOR
+
+
+def test_rare_han_characters_count_the_same_on_import_edit_append_and_export(studio):
+    text = "〇𠮷㐀海！ A1🚢"
+    result = studio.post("/api/novels/import_manuscript", json={
+        "name": "book", "title": "字数", "chapters": [{"title": "开篇", "text": text}],
+    })
+    assert result.status_code == 201
+    manager = StateManager("book")
+    assert manager.state.chapters[1].word_count == 4
+    edited = studio.patch("/api/novel/book/chapter_text", json={
+        "expected_revision": manager.revision, "chapter": 1, "text": text + "𠮷",
+    })
+    assert edited.status_code == 200
+    appended = studio.post("/api/novel/book/chapters", json={
+        "expected_revision": StateManager("book").revision, "title": "新章", "text": text,
+    })
+    assert appended.status_code == 201
+    assert studio.get("/api/novel/book").json()["summary"]["total_words"] == 9
+    assert "约 9 字" in studio.get("/api/novel/book/export").text
+
+
+def test_retrying_the_same_manual_append_uses_the_persisted_chapter_receipt(studio):
+    manager = import_book(studio)
+    url = "/api/novel/book/chapters"
+    headers = {"Idempotency-Key": "c" * 32}
+    body = {"title": "寄出", "text": "她寄出了信。", "expected_revision": manager.revision}
+    created = studio.post(url, headers=headers, json=body)
+    assert created.status_code == 201
+    retry = studio.post(url, headers=headers, json=body)
+    assert retry.status_code == 200
+    assert retry.json() == created.json()
+    assert StateManager("book").revision == created.json()["revision"]
+    assert studio.post(url, headers=headers, json={"title": body["title"], "text": body["text"]}).status_code == 428
+
+    # A rewrite can supply a fresh ChapterContent instance for the same chapter.
+    book = StateManager("book")
+    chapter = book.state.chapters[4].model_copy(update={"manual_append_id": None, "full_text": "她取回了信。"})
+    book.save_chapter(chapter)
+    changed = studio.post(url, headers=headers, json={**body, "expected_revision": book.revision})
+    assert changed.status_code == 409
+    assert changed.json()["code"] == "chapter_already_created"
+    assert changed.json()["chapter"] == 4
+    assert StateManager("book").revision == book.revision
+    assert list(StateManager("book").state.chapters) == [1, 2, 3, 4]
+
+
+def test_reusing_a_chapter_number_after_rollback_isolates_its_versions(studio):
+    book = import_book(studio)
+    book.replace_chapter_text(2, "旧时间线改稿。")
+    key = book.state.chapters[2].chapter_id
+    original = book.base_dir / "chapter_versions" / "000002" / key / "00000001.json"
+    original_bytes = original.read_bytes()
+    assert book.rollback_to_chapter(1)
+    new = book.append_manual_chapter("新二", "新时间线。")
+    assert new.chapter_id != key
+    path = "/api/novel/book/chapter/2/versions"
+    assert studio.get(path).json()["versions"] == []
+    assert studio.get(path + "/1").status_code == 404
+    assert studio.post(path + "/1", json={"expected_revision": book.revision}).status_code == 404
+    book.replace_chapter_text(2, "新时间线改稿。")
+    assert studio.get(path + "/1").json()["version"] == {"title": "新二", "text": "新时间线。"}
+    assert original.read_bytes() == original_bytes
+
+
+def test_existing_chapter_without_identity_still_uses_its_original_history(studio):
+    book = import_book(studio)
+    record = book.chapters_dir / "chapter_002.json"
+    chapter = json.loads(record.read_text("utf-8"))
+    del chapter["chapter_id"]
+    record.write_text(json.dumps(chapter, ensure_ascii=False), encoding="utf-8")
+    directory = book.base_dir / "chapter_versions" / "000002"
+    directory.mkdir(parents=True)
+    (directory / "00000001.json").write_text('{"title":"旧版","text":"原稿。"}', encoding="utf-8")
+    path = "/api/novel/book/chapter/2/versions"
+    assert studio.get(path + "/1").json()["version"]["text"] == "原稿。"
+    book = StateManager("book")
+    old = book.state.chapters[2].full_text
+    book.replace_chapter_text(2, "修改旧书。")
+    assert studio.get(path + "/2").json()["version"]["text"] == old
+    assert studio.get(path + "/1").json()["version"]["title"] == "旧版"

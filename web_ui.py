@@ -71,9 +71,9 @@ from core.manuscript_facts import (
     verify_sampled_facts,
 )
 from core.model_usage import collect_model_usage, usage_rows
-from core.project_archive import InvalidProjectArchive, import_project_archive
+from core.project_archive import InvalidProjectArchive, import_project_archive, write_project_archive
 from core.project_export import export_epub, export_markdown, export_platform_chapter, export_platform_text
-from core.project_search import search_project
+from core.project_search import search_saved_project
 from core.project_transactions import inspect_recovery_journals, recover_all_projects_detailed, recover_project
 from core.project_trash import (
     InvalidTrashEntryError,
@@ -94,9 +94,17 @@ from core.schemas import (
     WorldSetting,
 )
 from core.state_manager import ChapterContextError, StateManager
-from core.storage import ProjectBusyError, ProjectConflictError, ProjectReadOnlyError, project_lock, remove_file
+from core.storage import (
+    ProjectBusyError,
+    ProjectConflictError,
+    ProjectReadOnlyError,
+    ProjectRevisionConflictError,
+    assert_revision_matches,
+    project_lock,
+    remove_file,
+)
 from core.task_status import TaskAlreadyRunning, generation_status
-from core.text_limits import ChapterTextLimitError, check_chapter_length, check_replacement_length, replace_paragraph_at
+from core.text_limits import ChapterTextError, check_replacement_length, replace_paragraph_at
 from pipeline.novel_pipeline import NovelPipeline
 from services.generation_jobs import (
     run_audio_package_job,
@@ -297,6 +305,11 @@ def list_novels():
                 try:
                     pipeline = NovelPipeline(novel_id=p.name, lightweight=True, load_derived=False)
                     novels.append(pipeline.get_status_summary())
+                    if pipeline.state_manager.load_warnings:
+                        warnings.append({
+                            "novel_id": p.name,
+                            "message": "部分作品数据无法读取。请先保留作品目录和已有导出稿，再核对完整备份。",
+                        })
                 except Exception as exc:
                     error_id = report_internal_error(
                         logger,
@@ -417,17 +430,7 @@ def search_novel(
     normalized_query = " ".join(q.split())
     if not normalized_query:
         raise HTTPException(status_code=400, detail="搜索词不能为空")
-    state_manager = StateManager(
-        novel_id=novel_id,
-        load_memory=False,
-        load_derived=False,
-    )
-    return {
-        "novel_id": novel_id,
-        "revision": state_manager.revision,
-        "query": normalized_query,
-        "results": search_project(state_manager.state, normalized_query, limit=limit),
-    }
+    return search_saved_project(get_output_dir() / novel_id, normalized_query, limit=limit)
 
 
 @app.get("/api/novel/{novel_id}/snapshots")
@@ -699,12 +702,15 @@ async def project_busy_handler(request: Request, exc: ProjectBusyError):
 @app.exception_handler(ChapterContextError)
 async def project_conflict_handler(request: Request, exc: RuntimeError):
     detail = safe_user_message(exc, fallback="项目状态冲突，请刷新后重试")
-    return JSONResponse(status_code=409, content={"detail": detail})
+    body = {"detail": detail}
+    if isinstance(exc, ProjectRevisionConflictError):
+        body["code"] = "project_conflict"
+    return JSONResponse(status_code=409, content=body)
 
 
-@app.exception_handler(ChapterTextLimitError)
-async def chapter_text_limit_handler(request: Request, exc: ChapterTextLimitError):
-    detail = safe_user_message(exc, fallback="正文超过安全上限")
+@app.exception_handler(ChapterTextError)
+async def chapter_text_error_handler(request: Request, exc: ChapterTextError):
+    detail = safe_user_message(exc, fallback="章节正文不符合要求")
     return JSONResponse(status_code=422, content={"detail": detail})
 
 
@@ -1001,28 +1007,49 @@ def define_continuation_plan(novel_id: str, req: ContinuationPlanRequest):
 
 
 @app.post("/api/novel/{novel_id}/chapters", status_code=201)
-def append_manual_chapter(novel_id: str, req: AppendChapterRequest):
+def append_manual_chapter(
+    novel_id: str, req: AppendChapterRequest,
+    request_id: Annotated[str | None, Header(alias="Idempotency-Key", pattern=r"^[0-9a-f]{32}$")] = None,
+):
     _ensure_idle()
     _require_project(novel_id)
     manager = StateManager(novel_id)
-    _check_revision(manager, req.expected_revision)
-    chapter = manager.append_manual_chapter(req.title, req.text)
-    return {"chapter": chapter.chapter_number, "revision": manager.revision}
+    with manager.operation():
+        if request_id and req.expected_revision:
+            existing = next((ch for ch in manager.state.chapters.values() if ch.manual_append_id == request_id), None)
+            if existing:
+                receipt = {"chapter": existing.chapter_number, "revision": manager.revision}
+                if existing.title == req.title and existing.full_text == req.text:
+                    return JSONResponse(status_code=200, content=receipt)
+                return JSONResponse(status_code=409, content={
+                    **receipt, "code": "chapter_already_created",
+                    "detail": f"这份草稿已保存到第 {existing.chapter_number} 章，请核对正式稿后再修改。",
+                })
+        _check_revision(manager, req.expected_revision)
+        chapter = manager.append_manual_chapter(req.title, req.text, request_id=request_id)
+        return {"chapter": chapter.chapter_number, "revision": manager.revision}
 
 
 @app.patch("/api/novel/{novel_id}/chapter_text")
 def update_chapter_text(novel_id: str, req: ChapterTextRequest):
     _ensure_idle()
     _require_project(novel_id)
-    check_chapter_length(len(req.text))
-    pipeline = NovelPipeline(novel_id=novel_id)
-    _check_revision(pipeline.state_manager, req.expected_revision)
-    ok = pipeline.state_manager.replace_chapter_text(
-        req.chapter, req.text, mark_reconciliation=True, title=req.title,
-    )
-    if not ok:
-        raise HTTPException(status_code=404, detail=f"章节不存在: 第 {req.chapter} 章")
-    return {"status": "success", "message": f"第 {req.chapter} 章已更新"}
+    if not req.expected_revision:
+        raise HTTPException(status_code=428, detail="缺少作品版本，请先读取最新内容再提交修改")
+    with project_lock(get_output_dir() / novel_id, timeout=0):
+        try:
+            chapter, revision = StateManager.read_project_chapter_versioned(novel_id, req.chapter)
+        except (ValueError, OSError) as exc:
+            raise ProjectReadOnlyError("本章正文无法读取，请检查作品备份") from exc
+        assert_revision_matches(revision, req.expected_revision)
+        if chapter is None:
+            raise HTTPException(status_code=404, detail=f"章节不存在: 第 {req.chapter} 章")
+        if chapter.full_text == req.text and (req.title is None or chapter.title == req.title):
+            return {"status": "success", "message": "本章没有改动", "revision": revision}
+        manager = StateManager(novel_id)
+        _check_revision(manager, req.expected_revision)
+        manager.replace_chapter_text(req.chapter, req.text, mark_reconciliation=True, title=req.title)
+        return {"status": "success", "message": f"第 {req.chapter} 章已更新", "revision": manager.revision}
 
 
 @app.get("/api/novel/{novel_id}/chapter/{chapter_num}/versions")
@@ -1034,7 +1061,7 @@ def chapter_versions(novel_id: str, chapter_num: int):
         chapter, revision = StateManager.read_project_chapter_versioned(novel_id, chapter_num, recover=False)
         if chapter is None:
             raise HTTPException(status_code=404, detail="章节不存在")
-        return {"revision": revision, "versions": list_chapter_versions(project_dir, chapter_num)}
+        return {"revision": revision, "versions": list_chapter_versions(project_dir, chapter)}
 
 
 @app.get("/api/novel/{novel_id}/chapter/{chapter_num}/versions/{number}")
@@ -1044,7 +1071,7 @@ def chapter_version(novel_id: str, chapter_num: int, number: int):
     recover_project(project_dir.parent, novel_id)
     with project_lock(project_dir, scope="snapshot"):
         chapter, revision = StateManager.read_project_chapter_versioned(novel_id, chapter_num, recover=False)
-        previous = load_chapter_version(project_dir, chapter_num, number) if chapter else None
+        previous = load_chapter_version(project_dir, chapter, number) if chapter else None
         if previous is None:
             raise HTTPException(status_code=404, detail="历史稿不存在")
         return {"revision": revision, "version": previous.model_dump()}
@@ -1058,8 +1085,9 @@ def restore_chapter_version(novel_id: str, chapter_num: int, number: int, req: P
     with project_lock(project_dir, timeout=0):
         manager = StateManager(novel_id)
         _check_revision(manager, req.expected_revision)
-        previous = load_chapter_version(project_dir, chapter_num, number)
-        if previous is None or chapter_num not in manager.state.chapters:
+        chapter = manager.state.chapters.get(chapter_num)
+        previous = load_chapter_version(project_dir, chapter, number) if chapter else None
+        if previous is None:
             raise HTTPException(status_code=404, detail="历史稿不存在")
         manager.replace_chapter_text(chapter_num, previous.text, title=previous.title, mark_reconciliation=True)
     return {"revision": manager.revision, "chapter": chapter_num}
@@ -1177,12 +1205,10 @@ def export_backup(novel_id: str):
         zip_path = directory / f"{novel_id}_backup.zip"
         with project_lock(base_dir, timeout=0), project_lock(base_dir, scope="snapshot"):
             _require_project(novel_id)
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for p in sorted(base_dir.rglob("*")):
-                    if p.is_symlink() or not p.resolve().is_relative_to(base_dir):
-                        raise HTTPException(status_code=400, detail="项目包含链接到其他位置的文件，拒绝打包")
-                    if p.is_file():
-                        zf.write(p, p.relative_to(base_dir.parent))
+            try:
+                write_project_archive(base_dir, zip_path)
+            except InvalidProjectArchive as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         return zip_path
 
     return build_download(render, media_type="application/zip")

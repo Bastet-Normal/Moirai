@@ -37,19 +37,14 @@ from services.generation_jobs import (
     run_regenerate_job,
     run_short_drama_job,
 )
-
-
-def _hold_lock(path, acquired, release, scope):
-    with project_lock(Path(path), timeout=0, scope=scope):
-        acquired.set()
-        release.wait(20)
+from tests.lock_worker import hold_project_lock
 
 
 @contextmanager
 def held_in_child(path, scope="operation"):
     context = multiprocessing.get_context("spawn")
     acquired, release = context.Event(), context.Event()
-    child = context.Process(target=_hold_lock, args=(str(path), acquired, release, scope))
+    child = context.Process(target=hold_project_lock, args=(str(path), acquired, release, scope))
     child.start()
     try:
         if not acquired.wait(10):

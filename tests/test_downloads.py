@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 import web_ui
 from api.downloads import build_download
 from config.settings import get_settings
+from core import project_archive
 from core.schemas import ChapterContent, NovelConcept
 from core.state_manager import StateManager
 from core.task_status import GenerationTaskStatus
@@ -137,6 +138,7 @@ def test_download_missing_project_does_not_create_it(project, route):
 
 def test_downloaded_backup_restores_through_import_api_without_overwriting_source(project, tmp_path, monkeypatch):
     manager, client = project
+    manager.append_manual_chapter("长段草稿", "雨还在下。\n" * 2000)
     before = project_files(manager)
     backup = client.get("/api/novel/book/export_backup")
     assert backup.status_code == 200
@@ -162,6 +164,22 @@ def test_downloaded_backup_restores_through_import_api_without_overwriting_sourc
     finally:
         get_settings.cache_clear()
     assert project_files(manager) == before
+
+
+def test_backup_stores_only_members_that_would_exceed_the_restore_ratio(project, tmp_path, monkeypatch):
+    manager, client = project
+    manuscript = "雨落在旧码头。" * 5000
+    manager.append_manual_chapter("码头", manuscript)
+    monkeypatch.setattr(project_archive, "MAX_COMPRESSION_RATIO", 30)
+    response = client.get("/api/novel/book/export_backup")
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.getinfo("book/chapters/chapter_002.txt").compress_type == zipfile.ZIP_STORED
+        assert archive.getinfo("book/chapters/chapter_001.txt").compress_type == zipfile.ZIP_DEFLATED
+        assert all(info.file_size <= 30 * info.compress_size for info in archive.infolist())
+    restored = tmp_path / "restored"
+    project_archive.import_project_archive(response.content, restored)
+    assert StateManager.read_project_chapter("book", 2, str(restored)).full_text == manuscript
 
 
 def test_empty_book_cannot_produce_epub(project):

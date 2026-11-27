@@ -450,6 +450,7 @@
         .palette-input { flex: 1; border: none; background: transparent; color: var(--ink); font-size: 14.5px; font-weight: 600; outline: none; font-family: inherit; }
         .palette-input::placeholder { color: var(--ink-3); font-weight: 500; }
         .palette-list { overflow-y: auto; padding: 8px; }
+        .palette-status:not(:empty) { padding: 8px 18px; color: var(--ink-2); font-size: 12px; }
         .palette-group { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--ink-3); padding: 10px 10px 5px; text-transform: uppercase; }
         .palette-item {
             display: flex; align-items: center; gap: 11px; padding: 9.5px 11px; border-radius: 11px;
@@ -1539,7 +1540,7 @@
 
 <!-- 整章编辑 -->
 <div id="modal-chapter" class="modal-mask" onmousedown="maskClick(event,'modal-chapter')">
-    <div class="modal chapter-editor" onmousedown="event.stopPropagation()">
+    <div class="modal chapter-editor" onmousedown="event.stopPropagation()" onkeydown="chapterEditorKeydown(event)">
         <div class="modal-head">
             <div>
                 <h2 id="ce-heading" class="editorial-title">编辑本章</h2>
@@ -1551,7 +1552,7 @@
             <div class="editor-sheet">
                 <input id="ce-title" class="input" aria-label="章节标题" placeholder="未命名章节" maxlength="200" oninput="stashChapterDraft()">
                 <div class="editor-body">
-                    <textarea id="ce-text" aria-label="本章正文" rows="14" class="textarea" oninput="stashChapterDraft()" onkeydown="chapterEditorKeydown(event)"></textarea>
+                    <textarea id="ce-text" aria-label="本章正文" rows="14" class="textarea" oninput="stashChapterDraft()"></textarea>
                     <div class="editor-body-mirror" aria-hidden="true"></div>
                     <span class="editor-body-caret" aria-hidden="true"></span>
                 </div>
@@ -1771,7 +1772,8 @@
             <input id="palette-input" class="palette-input" aria-label="搜索作品、章节或操作" placeholder="搜索作品、章节或执行操作…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="palette-list" aria-expanded="false">
             <span class="chip !text-[9px] !px-1.5">ESC</span>
         </div>
-            <div id="palette-list" class="palette-list" role="listbox" aria-live="polite"></div>
+        <div id="palette-list" class="palette-list" role="listbox" aria-live="polite"></div>
+        <div id="palette-status" class="palette-status" role="status"></div>
         <div class="palette-foot">
             <span><kbd>↑</kbd><kbd>↓</kbd>选择</span>
             <span><kbd>Enter</kbd>执行</span>
@@ -2144,6 +2146,8 @@
     </div>
 </div>
 
+<script src="/assets/han-count.js"></script>
+<script src="/assets/editor-drafts.js"></script>
 <script src="/assets/entity-graph.js"></script>
 <script>
     let currentNovelId = '';
@@ -3549,7 +3553,14 @@
         resetDetachedAuditSource();
     }
 
-    const pendingHumanReviews = new Map();
+    const pendingHumanReviews = editorDrafts.readReviews();
+
+    function stashOpenReview() {
+        const modal = document.getElementById('modal-audit-history');
+        if (modal.classList.contains('open')) stashHumanReview(modal);
+    }
+    window.addEventListener('pagehide', stashOpenReview);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stashOpenReview(); });
 
     function humanReviewDecision() {
         if (document.getElementById('review-approved').checked) return 'approved';
@@ -3580,8 +3591,8 @@
         pendingHumanReviews.delete(key);
         if (note || decision) {
             pendingHumanReviews.set(key, {decision, note});
-            if (pendingHumanReviews.size > 100) pendingHumanReviews.delete(pendingHumanReviews.keys().next().value);
         }
+        editorDrafts.storeReviews(pendingHumanReviews);
     }
 
     async function openAuditHistoryModal() {
@@ -3611,6 +3622,7 @@
         const noteInput = document.getElementById('human-review-note');
         const decision = humanReviewDecision();
         const rawNote = noteInput.value;
+        const draftKey = modal._reviewDraftKey;
         const note = rawNote.trim();
         if (!decision) throw new Error('请选择本次审阅结论');
         if (decision === 'changes_requested' && !note) throw new Error('选择“需要修改”时请填写具体意见');
@@ -3620,6 +3632,11 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.detail || '人工审阅保存失败');
+        const submitted = pendingHumanReviews.get(draftKey);
+        if (submitted?.decision === decision && submitted.note === rawNote) {
+            pendingHumanReviews.delete(draftKey);
+            editorDrafts.storeReviews(pendingHumanReviews);
+        }
         showToast(data.message || '人工审阅已记录', 'success');
         if (!isCurrentContext(context) || modal._projectContext !== context || currentNovelId !== data.novel_id || selectedChapterNum !== data.chapter_number) return;
         const chapter = sortedChapters.find(item => item.chapter_number === chapterNumber);
@@ -3631,8 +3648,8 @@
         for (const item of sortedChapters) item._revision = data.revision;
         modal._projectContext = Object.freeze({novelId: context.novelId, revision: data.revision, loadToken: context.loadToken});
         if (humanReviewDecision() === decision && noteInput.value === rawNote) {
-            pendingHumanReviews.delete(modal._reviewDraftKey);
             fillHumanReviewDraft();
+            stashHumanReview(modal);
         }
         document.getElementById('current-chapter-meta').textContent = chapterQualityMeta(chapter);
         renderAuditHistory(chapter);
@@ -4576,41 +4593,6 @@
         else { showToast(d.detail || '保存失败', 'error'); }
     }
 
-    function chapterDraftKey(context, chapter, append = false) {
-        return `moirai_editor:${context.novelId}:${chapter}${append ? ':new' : ''}`;
-    }
-
-    function readChapterDraft(key) {
-        for (const storage of ["sessionStorage", "localStorage"]) {
-            try {
-                const draft = JSON.parse(globalThis[storage]?.getItem(key));
-                if (draft) return draft;
-            } catch { /* Browser storage may be unavailable. */ }
-        }
-        return null;
-    }
-
-    function draftStorageValue(storage, key) {
-        try { return globalThis[storage]?.getItem(key) ?? null; }
-        catch { return null; }
-    }
-
-    function persistentDraftValue(key) { return draftStorageValue('localStorage', key); }
-
-    function removeStoredDraft(storage, key, expected) {
-        if (expected && draftStorageValue(storage, key) === expected) {
-            try { globalThis[storage]?.removeItem(key); } catch { /* Optional draft storage. */ }
-        }
-    }
-
-    function matchesEditorDraft(stored, text, title) {
-        if (!stored) return false;
-        try {
-            const draft = JSON.parse(stored);
-            return draft?.text === text && draft?.title === title;
-        } catch { return false; }
-    }
-
     function openChapterEditModal() {
         const chapter = sortedChapters[selectedChapterIdx];
         if (!chapter || typeof chapter.full_text !== 'string') {
@@ -4620,9 +4602,13 @@
         loadChapterEditor(chapter);
     }
 
-    function openNewChapterEditor() {
+    function nextChapterForEditor() {
         const number = Number(novelData?.summary?.current_chapter || sortedChapters.at(-1)?.chapter_number || 0) + 1;
-        loadChapterEditor({chapter_number: number, title: '', full_text: ''}, { append: true });
+        return {chapter_number: number, title: '', full_text: ''};
+    }
+
+    function openNewChapterEditor() {
+        loadChapterEditor(nextChapterForEditor(), {append:true});
     }
 
     function loadChapterEditor(chapter, { append = false, recovered = null, rebind = false } = {}) {
@@ -4630,11 +4616,15 @@
         const mask = document.getElementById('modal-chapter');
         const outline = novelData.global_outline?.volumes?.flatMap(volume => volume.chapters || [])
             .find(item => item.chapter_number === chapter.chapter_number);
-        const key = chapterDraftKey(context, chapter.chapter_number, append);
-        const draft = recovered || readChapterDraft(key);
-        const persistent = persistentDraftValue(key);
-        const localTab = draftStorageValue('sessionStorage', key);
-        mask._draftStoredValue = localTab && localTab !== persistent ? null : persistent;
+        if (!rebind) {
+            mask._draftKey = append ? editorDrafts.newChapterKey(context.novelId, chapter.chapter_number) : editorDrafts.chapterKey(context.novelId, chapter.chapter_number);
+        }
+        const key = mask._draftKey;
+        const stored = rebind ? null : editorDrafts.open(key);
+        const draft = recovered || stored?.draft;
+        if (!rebind) mask._appendRequestId = /^[0-9a-f]{32}$/.test(draft?.appendRequestId) ? draft.appendRequestId : null;
+        mask._committedAppendChapter = null;
+        if (!rebind) mask._draftStoredValue = stored.ownedValue;
         document.getElementById('ce-versions').classList.toggle('hidden', append);
         document.getElementById('ce-audit').classList.toggle('hidden', append);
         if (!rebind) document.getElementById('ce-reference').open = !window.matchMedia('(max-width: 700px)').matches;
@@ -4650,6 +4640,10 @@
         document.getElementById('ce-text').value = draft?.text ?? chapter.full_text;
         mask._editorChapter = chapter.chapter_number;
         mask._appendChapter = append;
+        mask._catalogChanged = false;
+        document.getElementById('ce-title').readOnly = false;
+        document.getElementById('ce-text').readOnly = false;
+        document.getElementById('ce-reload').textContent = append ? '更新章节目录' : '核对最新正式稿';
         mask._originalText = chapter.full_text;
         const baseline = {title: chapter.title, text: chapter.full_text};
         mask._draftBaseline = draft?.baseline ?? (draft && draft.revision !== context.revision ? null : baseline);
@@ -4669,7 +4663,7 @@
     function renderChapterDraftStatus(message) {
         const mask = document.getElementById('modal-chapter');
         const text = document.getElementById('ce-text').value;
-        const count = (text.match(/\p{Script=Han}/gu) || []).length;
+        const count = countHanCharacters(text);
         document.getElementById('ce-count').textContent = `${count.toLocaleString()} 个汉字`;
         const pending = mask._draftConflict && !mask._draftAccepted;
         const comparison = document.getElementById('ce-conflict');
@@ -4680,7 +4674,7 @@
             document.getElementById('ce-conflict-current').textContent = [mask._originalTitle, mask._originalText].join('\n\n');
         }
         comparison.classList.toggle('hidden', !pending);
-        document.getElementById('ce-save').disabled = pending;
+        document.getElementById('ce-save').disabled = pending || mask._catalogChanged;
         document.getElementById('ce-draft-status').textContent = pending ? '正式稿已变动，先核对再保存。' : message;
         const title = document.getElementById('ce-title').value;
         const changed = text !== mask._originalText || title !== mask._originalTitle;
@@ -4691,31 +4685,28 @@
     function stashChapterDraft() {
         const mask = document.getElementById('modal-chapter');
         const context = modalContext('modal-chapter');
-        const key = chapterDraftKey(context, mask._editorChapter, mask._appendChapter);
+        const key = mask._draftKey;
         const text = document.getElementById('ce-text').value;
         const title = document.getElementById('ce-title').value;
         let message = '';
         if (text === mask._originalText && title === mask._originalTitle) {
-            removeStoredDraft('localStorage', key, mask._draftStoredValue);
-            removeStoredDraft('sessionStorage', key, draftStorageValue('sessionStorage', key));
+            editorDrafts.clear(key, mask._draftStoredValue, editorDrafts.tabValue(key));
+            if (mask._appendChapter) mask._appendRequestId = null;
             mask._draftStoredValue = null;
             mask._recoveredRevision = undefined;
             mask._draftBaseline = {title: mask._originalTitle, text: mask._originalText};
             mask._draftConflict = false;
         } else {
-            const draft = JSON.stringify({revision: mask._recoveredRevision || context.revision, baseline: mask._draftBaseline, text, title});
-            try {
-                if (persistentDraftValue(key) !== mask._draftStoredValue) throw new Error('另一标签页保存了更新的草稿');
-                localStorage.setItem(key, draft);
-                mask._draftStoredValue = draft;
-                try { sessionStorage.removeItem(key); } catch { /* Old drafts were session scoped. */ }
-                message = '草稿已保存在本机浏览器';
-            } catch {
-                try {
-                    sessionStorage.setItem(key, draft);
-                    message = '本机草稿无法更新，当前修改暂存在此标签页。关闭前请保存。';
-                } catch { message = '草稿暂存空间不足，关闭前请保存正文。'; }
-            }
+            const saved = editorDrafts.write(key, mask._draftStoredValue, {
+                revision:mask._recoveredRevision || context.revision, baseline:mask._draftBaseline, text, title,
+                ...(mask._appendRequestId ? {appendRequestId:mask._appendRequestId} : {}),
+            });
+            mask._draftStoredValue = saved.ownedValue;
+            message = {
+                local:'草稿已保存在本机浏览器',
+                tab:'本机草稿无法更新，当前修改暂存在此标签页。关闭前请保存。',
+                unavailable:'草稿暂存空间不足，关闭前请保存正文。',
+            }[saved.store];
         }
         renderChapterDraftStatus(message);
     }
@@ -4724,22 +4715,28 @@
         const id = 'modal-chapter';
         const mask = document.getElementById(id);
         const context = modalContext(id);
-        if (mask._appendChapter || currentNovelId !== context.novelId) return;
+        if (currentNovelId !== context.novelId) return;
         const opening = mask._openedAt;
         const applies = () => mask.classList.contains('open') && mask._openedAt === opening && mask._projectContext === context;
         const text = document.getElementById('ce-text');
         const title = document.getElementById('ce-title');
         stashChapterDraft();
         if (!await selectNovelForDraft(context) || !applies()) return;
-        const chapter = sortedChapters.find(item => item.chapter_number === mask._editorChapter);
+        const committed = mask._committedAppendChapter;
+        const append = mask._appendChapter && !committed;
+        const chapter = append ? nextChapterForEditor() : sortedChapters.find(item => item.chapter_number === (committed || mask._editorChapter));
         if (!chapter) throw new Error('本章不在最新目录中。请先下载草稿，避免丢失。');
         const latest = captureProjectContext();
-        await ensureChapterLoaded(chapter);
+        if (!append) await ensureChapterLoaded(chapter);
         if (!applies() || !isCurrentContext(latest) || latest.revision !== novelData?.revision) return;
+        if (committed && chapter.manual_append_id !== mask._appendRequestId) {
+            throw new Error('该章已被移除或替换，请先下载这份草稿。');
+        }
         const selection = [text.selectionStart, text.selectionEnd, text.selectionDirection];
         const scroll = text.scrollTop;
-        loadChapterEditor(chapter, {rebind:true, recovered:{revision:context.revision, baseline:mask._draftBaseline,
+        loadChapterEditor(chapter, {append, rebind:true, recovered:{revision:context.revision, baseline:mask._draftBaseline,
             text:text.value, title:title.value}});
+        if (append) renderChapterDraftStatus(`目录已更新，保存时将新增第 ${chapter.chapter_number} 章。`);
         text.focus({preventScroll:true});
         text.setSelectionRange?.(...selection);
         text.scrollTop = scroll;
@@ -4874,7 +4871,7 @@
     async function saveChapterEdit() {
         const mask = document.getElementById('modal-chapter');
         const context = modalContext('modal-chapter');
-        if (mask._draftConflict && !mask._draftAccepted) return;
+        if (mask._catalogChanged || (mask._draftConflict && !mask._draftAccepted)) return;
         const chapter = mask._editorChapter ?? window._editingChapter;
         const text = document.getElementById('ce-text').value;
         const append = mask._appendChapter;
@@ -4882,32 +4879,75 @@
         const title = rawTitle.trim();
         if (!text.trim()) { showToast('正文不能为空', 'warn'); return; }
         if (!title && (append || mask._originalTitle)) { showToast('请填写新章标题', 'warn'); return; }
-        const key = chapterDraftKey(context, chapter, append);
+        const key = mask._draftKey;
+        const headers = {'Content-Type':'application/json'};
+        if (append) {
+            if (!mask._appendRequestId) {
+                mask._appendRequestId = crypto.randomUUID().replaceAll('-', '');
+                stashChapterDraft();
+            }
+            headers['Idempotency-Key'] = mask._appendRequestId;
+        }
         const persistentAtSave = mask._draftStoredValue;
-        const tabAtSave = draftStorageValue('sessionStorage', key);
+        const tabAtSave = editorDrafts.tabValue(key);
         const action = append ? 'chapters' : 'chapter_text';
-        const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/${action}`, {
-            method: append ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: revisionBody(context, append ? { title, text } : { chapter, text, ...(title && title !== mask._originalTitle ? {title} : {}) })
-        });
+        const bodyField = document.getElementById('ce-text');
+        const titleField = document.getElementById('ce-title');
+        const opening = mask._openedAt;
+        if (append) bodyField.readOnly = titleField.readOnly = true;
+        let res, data;
+        try {
+            res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/${action}`, {
+                method: append ? 'POST' : 'PATCH', headers,
+                body: revisionBody(context, append ? { title, text } : { chapter, text, ...(title && title !== mask._originalTitle ? {title} : {}) })
+            });
+            data = res.ok ? await res.json() : await res.json().catch(() => ({}));
+        } finally {
+            if (append && mask._openedAt === opening) bodyField.readOnly = titleField.readOnly = false;
+        }
         if (res.ok) {
-            if (matchesEditorDraft(persistentAtSave, text, rawTitle)) removeStoredDraft('localStorage', key, persistentAtSave);
-            if (matchesEditorDraft(tabAtSave, text, rawTitle)) removeStoredDraft('sessionStorage', key, tabAtSave);
-            if (mask._projectContext === context && document.getElementById('ce-text').value === text && document.getElementById('ce-title').value.trim() === title) {
-                closeProjectModal('modal-chapter', context);
+            editorDrafts.afterSave(key, persistentAtSave, tabAtSave, rawTitle, text);
+            let continued;
+            if (mask._projectContext === context && mask.classList.contains('open')) {
+                if (bodyField.value === text && titleField.value.trim() === title) {
+                    closeProjectModal('modal-chapter', context);
+                } else if (!append && data.revision) {
+                    // Further typing belongs on top of the acknowledged manuscript.
+                    mask._originalText = text;
+                    mask._originalTitle = title;
+                    mask._draftBaseline = {text, title};
+                    mask._recoveredRevision = data.revision;
+                    mask._draftConflict = mask._draftAccepted = false;
+                    continued = Object.freeze({...context, revision:data.revision});
+                    mask._projectContext = continued;
+                    stashChapterDraft();
+                }
             }
             showToast(append ? '新章已保存' : '本章已更新', 'success');
-            if (await refreshProjectContext(context) && append) {
-                const index = sortedChapters.findIndex(item => item.chapter_number === chapter);
-                if (index >= 0) { switchTab('chapters'); await showChapter(index); }
+            if (await refreshProjectContext(context)) {
+                if (continued && mask._projectContext === continued && novelData.revision === continued.revision) {
+                    mask._projectContext = captureProjectContext();
+                }
+                if (append) {
+                    const index = sortedChapters.findIndex(item => item.chapter_number === data.chapter);
+                    if (index >= 0) { switchTab('chapters'); await showChapter(index); }
+                }
             }
         } else {
-            const err = await res.json().catch(() => ({}));
-            if (res.status === 409 && mask._projectContext === context && mask.classList.contains('open')) {
+            const err = data;
+            const projectChanged = err.code === 'project_conflict' || (!err.code && String(err.detail).startsWith('作品已更新'));
+            const committed = append && err.code === 'chapter_already_created' && Number.isSafeInteger(err.chapter) && err.chapter > 0;
+            if (res.status === 409 && (projectChanged || committed) && mask._projectContext === context && mask.classList.contains('open')) {
                 stashChapterDraft();
                 document.getElementById('ce-reference').open = true;
-                if (!append) document.getElementById('ce-reload').classList.remove('hidden');
-                showToast(append ? '目录已变化。新章未提交，可先下载草稿。' : '正式稿可能已更新。草稿仍在编辑区，可核对最新正式稿。', 'warn');
+                if (append) {
+                    mask._catalogChanged = true;
+                    mask._committedAppendChapter = committed ? err.chapter : null;
+                    if (committed) document.getElementById('ce-reload').textContent = '核对已保存的章节';
+                    renderChapterDraftStatus(committed ? err.detail : '请更新目录后再保存新章。');
+                }
+                document.getElementById('ce-reload').classList.remove('hidden');
+                showToast(err.detail || '作品已更新，请核对后再保存。', 'warn');
             } else showToast(err.detail || '保存失败', 'error');
         }
     }
@@ -5393,9 +5433,18 @@
         const data = await result.json();
         if (!isCurrentContext(context) || selectedChapterNum !== chapter) return;
         if (!result.ok || data.revision !== context.revision) throw new Error(data.detail || '作品已更新，请刷新后重试');
-        document.getElementById('publication-note').textContent = data.has_unreviewed_changes
+        const note = document.getElementById('publication-note');
+        note.textContent = data.has_unreviewed_changes
             ? '当前版本待人工审阅。以下为分章 TXT 的排版，词语提示请在内容检查中核对。'
             : '当前版本已由作者确认。以下为分章 TXT 的排版。';
+        const drafts = editorDrafts.list(context.novelId);
+        if (drafts.length) {
+            const chapters = drafts.filter(key => /^\d+$/.test(key)).map(Number).sort((a, b) => a - b);
+            const labels = chapters.slice(0, 5).map(number => `第 ${number} 章`);
+            if (chapters.length > 5) labels.push(`另有 ${chapters.length - 5} 章`);
+            if (drafts.some(key => key.endsWith('new'))) labels.push('新章');
+            note.textContent += ` 本机留有编辑草稿（${labels.join('、')}）。导出使用作品库中已保存的正文。`;
+        }
         document.getElementById('publication-text').textContent = data.text;
         const rules = document.getElementById('publication-rules');
         rules.replaceChildren();
@@ -5978,6 +6027,7 @@
         input.value = '';
         paletteSearchToken++;
         paletteRemoteItems = [];
+        document.getElementById('palette-status').textContent = '';
         renderPalette('');
         focusVisibleOverlay(mask, () => input);
     }
@@ -6002,18 +6052,20 @@
         });
     }
 
-    function renderPalette(query) {
-        const all = [...buildPaletteCommands(), ...paletteRemoteItems];
+    function renderPalette(query, preserveSelection = false) {
+        const all = buildPaletteCommands();
         const q = normalizePaletteQuery(query).toLowerCase();
         const filtered = q ? all.filter(c => c.label.toLowerCase().includes(q)
-            || (c.group || '').toLowerCase().includes(q)
-            || (c.searchText || '').toLowerCase().includes(q)) : all;
-        paletteItems = filtered.slice(0, 30);
-        paletteIndex = 0;
+            || (c.group || '').toLowerCase().includes(q)) : all;
+        const previousIndex = paletteIndex;
+        paletteItems = [...filtered, ...paletteRemoteItems].slice(0, 30);
+        // Remote hits are appended to the local matches. Keep the author's keyboard selection.
+        paletteIndex = preserveSelection ? Math.max(0, Math.min(previousIndex, paletteItems.length - 1)) : 0;
 
         const box = document.getElementById('palette-list');
         if (!paletteItems.length) {
-            box.innerHTML = '<div class="palette-empty">没有匹配的结果</div>';
+            box.innerHTML = document.getElementById('palette-status').textContent
+                ? '' : '<div class="palette-empty">没有匹配的结果</div>';
             document.getElementById('palette-input').removeAttribute('aria-activedescendant');
             return;
         }
@@ -6030,7 +6082,7 @@
             </div>`;
         });
         box.innerHTML = html;
-        document.getElementById('palette-input').setAttribute('aria-activedescendant', 'palette-option-0');
+        document.getElementById('palette-input').setAttribute('aria-activedescendant', `palette-option-${paletteIndex}`);
     }
 
     function normalizePaletteQuery(query) {
@@ -6068,7 +6120,7 @@
         }[result.kind] || ['全书', 'fa-magnifying-glass'];
         return {
             group: meta[0], icon: meta[1], label: result.label,
-            detail: result.snippet || '', searchText: result.snippet || '', hint: '定位',
+            detail: result.snippet || '', hint: '定位',
             run: () => {
                 if (!isCurrentContext(context)) {
                     showToast('作品已切换，请重新搜索', 'warn');
@@ -6084,18 +6136,29 @@
     }
 
     async function loadPaletteSearch(query, token, context, controller = null) {
+        const current = () => token === paletteSearchToken && isCurrentContext(context)
+            && normalizePaletteQuery(document.getElementById('palette-input').value) === query;
+        const status = document.getElementById('palette-status');
         try {
             const options = controller ? { signal: controller.signal } : {};
             const res = await fetch(`/api/novel/${encodeURIComponent(context.novelId)}/search?q=${encodeURIComponent(query)}&limit=40`, options);
-            if (!res.ok) return false;
+            if (!res.ok) throw new Error('search unavailable');
             const payload = await res.json();
-            if (token !== paletteSearchToken || !isCurrentContext(context)
-                || payload.novel_id !== context.novelId || payload.revision !== context.revision
-                || normalizePaletteQuery(document.getElementById('palette-input').value) !== query) return false;
+            if (!current()) return false;
+            if (payload.novel_id !== context.novelId || payload.revision !== context.revision) {
+                status.textContent = '作品已更新，刷新作品后可搜索最新正文。';
+                renderPalette(query, true);
+                return false;
+            }
+            status.textContent = payload.incomplete ? '部分章节无法读取，仅显示可读取内容的匹配结果。' : '';
             paletteRemoteItems = (payload.results || []).map(result => paletteSearchItem(result, context));
-            renderPalette(query);
+            renderPalette(query, true);
             return true;
         } catch (error) {
+            if (current() && !controller?.signal.aborted) {
+                status.textContent = '全文搜索暂时不可用，请稍后再试。';
+                renderPalette(query, true);
+            }
             return false;
         } finally {
             if (token === paletteSearchToken) {
@@ -6113,8 +6176,11 @@
         paletteSearchTimer = null;
         if (paletteSearchController) paletteSearchController.abort();
         paletteSearchController = null;
+        const searching = Boolean(normalized && currentNovelId && novelData?.revision);
+        document.getElementById('palette-status').textContent = searching ? '正在搜索正文和设定…' : '';
+        document.getElementById('palette-list').removeAttribute('aria-busy');
         renderPalette(query);
-        if (!normalized || !currentNovelId || !novelData?.revision) return;
+        if (!searching) return;
         const context = captureProjectContext();
         const controller = typeof AbortController === 'function' ? new AbortController() : null;
         paletteSearchController = controller;

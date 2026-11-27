@@ -113,7 +113,8 @@ def test_playwright_dependency_and_local_server_contract_are_exact():
     assert re.fullmatch(r"\d+\.\d+\.\d+", safari)
     assert lock["packages"][""]["devDependencies"]["selenium-webdriver"] == safari
     assert lock["packages"]["node_modules/selenium-webdriver"]["version"] == safari
-    assert package["scripts"]["test:browser"] == "playwright test"
+    assert package["scripts"]["test:browser"] == "playwright test --config playwright.safari.config.mjs"
+    assert package["scripts"]["test:webkit"] == "playwright test"
     assert {key for key in package["scripts"] if key.startswith("test:browser")} == {"test:browser"}
 
     config = PLAYWRIGHT_CONFIG.read_text(encoding="utf-8")
@@ -122,7 +123,11 @@ def test_playwright_dependency_and_local_server_contract_are_exact():
     assert "reuseExistingServer: false" in config
     assert "OPENAI_API_KEY: ''" in config
     assert "OPENAI_BASE_URL: 'http://127.0.0.1:9/v1'" in config
-    assert re.findall(r"name:\s*'([^']+)'", config) == ["safari"]
+    assert re.findall(r"name:\s*'([^']+)'", config) == ["webkit"]
+    assert "headless:true" in config
+    safari_config = (ROOT / "playwright.safari.config.mjs").read_text(encoding="utf-8")
+    assert "from './playwright.config.mjs'" in safari_config
+    assert "name:'safari'" in safari_config
     driver = (ROOT / "tests/browser/native-safari.mjs").read_text(encoding="utf-8")
     assert "/usr/bin/safaridriver" in driver
     assert ".forBrowser('safari')" in driver

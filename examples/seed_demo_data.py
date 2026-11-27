@@ -29,6 +29,7 @@ from core.schemas import (
     WorldSetting,
 )
 from core.state_manager import StateManager
+from core.text_limits import count_han_characters
 
 NOVEL_ID = "demo_showcase"
 
@@ -237,7 +238,7 @@ def main():
                           character_ooc_issues=[], cliffhanger_detected=True, critique="节奏凌厉，钩子扎实。", revision_directives=[])]
 
     def make_chap(num, title, text, hook):
-        wc = len([c for c in text if '\u4e00' <= c <= '\u9fff'])
+        wc = count_han_characters(text)
         return ChapterContent(chapter_number=num, volume_number=1, title=title, word_count=wc,
                               beats_raw_text=[f"节拍{i}" for i in range(1, 4)], full_text=text,
                               cliffhanger_ending=hook, audit_history=audits)
