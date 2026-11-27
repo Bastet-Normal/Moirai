@@ -299,7 +299,7 @@ test('searches lazy chapter prose and jumps without changing the project revisio
     await page.evaluate(() => {
         window.safariShortcut = null;
         document.addEventListener('keydown', event => {
-            if (event.key !== 'Control') window.safariShortcut = [event.key, event.ctrlKey];
+            if (event.key !== 'Control') window.safariShortcut = [event.key.toLowerCase(), event.ctrlKey];
         }, true);
     });
     await page.keyboard.press('Control+K');
@@ -524,7 +524,7 @@ test('creates, continues, rewrites and delivers a planned novel through real bac
     await page.getByRole('button', { name: '编辑细纲', exact: true }).click();
     const outline = page.locator('#modal-outline');
     await expect.poll(() => outline.getAttribute('class')).toMatch(/open/);
-    await page.getByLabel('章节标题', { exact: true }).fill('重写验证：第二封信');
+    await outline.getByRole('textbox', { name: '章节标题', exact: true }).fill('重写验证：第二封信');
     await outline.getByRole('button', { name: '保存', exact: true }).click();
     await expect.poll(() => outline.isVisible()).toBe(false);
     let currentProject = await (await page.request.get(`/api/novel/${projectId}`)).json();
