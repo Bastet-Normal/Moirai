@@ -57,7 +57,7 @@ function spaceRelationLabels(cy, unit) {
         const nx = length ? -dy / length : 0, ny = length ? dx / length : -1;
         const nearby = obstacles || [boxes.get(source.id()), boxes.get(target.id())];
         let bestScore = Infinity, best;
-        for (const offset of [0, 6, -6, 12, -12, 18, -18, 24, -24]) {
+        for (const offset of [0, 6, -6, 12, -12, 18, -18, 24, -24, 32, -32, 42, -42, 54, -54]) {
             const mx = nx * offset * unit, my = ny * offset * unit;
             const rect = {x1:x+mx, y1:y+my, x2:x+mx+box.w, y2:y+my+box.h};
             let score = 0;
@@ -249,7 +249,7 @@ function renderCytoscapeGraph(forceLayout = false) {
         layout: {name:'preset', fit:false},
     });
     let scaleFrame = 0;
-    cyInstance.on('zoom resize layoutstop dragfree', ({cy}) => {
+    cyInstance.on('zoom resize layoutstop dragfree select unselect', ({cy}) => {
         if (!cy.container()) return;
         if (scaleFrame) return;
         scaleFrame = requestAnimationFrame(() => {

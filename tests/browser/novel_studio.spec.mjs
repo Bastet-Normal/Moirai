@@ -230,7 +230,10 @@ test('blank workspace clicks leave the outline off and a single graph node stays
     await page.getByRole('button', {name:'打开作品：群星航路', exact:true}).click();
     const tabs = page.getByRole('tablist', {name:'群星航路 · 作品工作区', exact:true});
     await tabs.getByRole('tab', {name:'实体图谱', exact:true}).click();
-    await expect.poll(() => page.evaluate(() => cyInstance?.edges().length)).toBe(6);
+    await expect.poll(() => page.evaluate(() => ({
+        tab: activeTab, book: currentNovelId, edges: cyInstance?.edges().length ?? 0,
+        issues: window.safariIssues,
+    }))).toEqual({tab:'graph', book:'demo_beta', edges:6, issues:[]});
     expect(await page.evaluate(() => cyInstance.nodes().length)).toBe(7);
     const icons = await page.evaluate(async () => {
         const images = Array.from(document.querySelectorAll('#graph-legend img'));
@@ -255,11 +258,11 @@ test('blank workspace clicks leave the outline off and a single graph node stays
     await page.locator('#graph-entity').selectOption('南薇');
     await expect.poll(() => page.evaluate(() => {
         const labelsOnly = {includeNodes:false, includeEdges:false, includeOverlays:false, includeUnderlays:false};
-        const labels = cyInstance.elements().map(el => el.renderedBoundingBox(labelsOnly));
-        return labels.every((a, i) => labels.slice(i + 1).every(b =>
-            Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) <= 1 ||
-            Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) <= 1));
-    })).toBe(true);
+        const labels = cyInstance.elements().map(el => ({id:el.id(), ...el.renderedBoundingBox(labelsOnly)}));
+        return labels.flatMap((a, i) => labels.slice(i + 1).filter(b =>
+            Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 1 &&
+            Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) > 1).map(b => [a.id, b.id]));
+    })).toEqual([]);
 });
 
 test('keyboard tab navigation changes tools without changing chapters', async ({ safariPage: page }) => {
